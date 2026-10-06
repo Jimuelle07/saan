@@ -1,0 +1,61 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 1388 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 750 Td
+(Vendor Contract Summary - ERP Software License Renewal) Tj
+T* (Prepared by Procurement for the Warehouse Platform team) Tj
+T* (Parties) Tj
+T* (Our company \(customer\) and Northwind ERP Systems \(vendor\).) Tj
+T* (Term) Tj
+T* (Three years starting January 1, with automatic one-year renewals unless either party) Tj
+T* (gives 90 days written notice.) Tj
+T* (Fees) Tj
+T* (- Annual license: $186,000, up 6 percent from the previous term.) Tj
+T* (- Support tier: Premium, 4 hour response time for severity 1 incidents.) Tj
+T* (- Price increases capped at 4 percent per year for renewals.) Tj
+T* (Key restrictions) Tj
+T* (- No direct access to the vendor's database. Integrations must use the official API.) Tj
+T* (- API rate limit of 50 requests per second per tenant.) Tj
+T* (- Data must be stored in the United States.) Tj
+T* (Service levels) Tj
+T* (- 99.9 percent monthly uptime. Service credits of 5 percent of monthly fees per 0.1) Tj
+T* (  percent below the target, capped at 25 percent.) Tj
+T* (Termination) Tj
+T* (Either party may terminate for material breach after a 30 day cure period. On exit the) Tj
+T* (vendor must export all data in CSV format within 30 days.) Tj
+T* (Open issues for legal) Tj
+T* (- Request a cap on liability equal to 12 months of fees.) Tj
+T* (- Clarify whether sandbox environments count toward the license seat total.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1783
+%%EOF

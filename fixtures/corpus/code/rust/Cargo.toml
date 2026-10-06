@@ -1,0 +1,24 @@
+[package]
+name = "photo-renamer"
+version = "0.3.1"
+edition = "2021"
+description = "Rename photos by the date they were taken, read from EXIF metadata"
+license = "MIT"
+
+[dependencies]
+kamadak-exif = "0.5"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+walkdir = "2"
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "photo-renamer"
+path = "src/main.rs"

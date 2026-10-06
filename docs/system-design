@@ -1,0 +1,208 @@
+# saan — system design
+
+*saan* (Filipino for "where?") is a privacy-first, local file launcher. This
+document describes the architecture as implemented in this repository. Every
+claim below is grounded in the code; file paths are relative to the repo root.
+
+## Components
+
+| Component | Location | Responsibility |
+|---|---|---|
+| `saan-core` library | `crates/core/src` | Chunking, embedding, extraction, index, router, grep, glob, Jev client, engine. |
+| `saan` CLI | `crates/cli/src/main.rs` | `fetch-model`, `index`, `search`, `grep`, `glob`, `eval`, `bench`. |
+| Tauri app | `src-tauri/src/main.rs` | Desktop window + global hotkey, Tauri commands, engine state, Jev wiring. |
+| Frontend | `index.html`, `src/main.ts` | Plain TypeScript launcher UI (debounced search, keyboard nav, folder setup). |
+
+### Core modules (`crates/core/src`)
+
+| Module | Key items | Notes |
+|---|---|---|
+| `lib.rs` | `Engine`, `Hit`, `SearchResponse`, `Index`, `Mode`, `Route`, `rel_path` | Re-exports plus `rel_path` (forward slashes, relative to the index root when possible). |
+| `chunk.rs` | `CHUNK_CHARS = 1200`, `OVERLAP_CHARS = 200`, `chunk_ranges` | Byte ranges into extracted text; snaps to a line break in the back half of the window and always to char boundaries. |
+| `embed.rs` | `Embedder`, `find_model_dir`, `doc_prompt`, `MODEL_DIR_NAME`, `MODEL_REPO`, `MODEL_FILES` | EmbeddingGemma-300m via ONNX Runtime, on-device. |
+| `extract.rs` | `walk_files`, `extract_text`, `looks_binary`, `MAX_INDEX_BYTES = 2 MiB` | Walks with the `ignore` crate (respects `.gitignore`/`.ignore` and hidden-file rules); skips files > 2 MiB for embedding; PDFs via `pdf-extract`; binary when the first 8 KiB contain a NUL byte. |
+| `index.rs` | `Index`, `FileEntry`, `ChunkEntry`, `FileScore`, `BuildStats` | On-disk `meta.json` + `vectors.f32`; brute-force cosine search; incremental reuse. |
+| `router.rs` | `Mode`, `Route`, `RouteSource`, `local_route`, `CONFIDENT = 0.75` | Deterministic local query router. |
+| `grep.rs` | `grep`, `GrepHit`, `MAX_LINE_CHARS = 200` | Line-oriented regex search, smart case, ripgrep-style. |
+| `glob.rs` | `glob` | Path pattern matching over the walked file list. |
+| `jev.rs` | `JevClient`, `Privacy`, `Candidate`, `SNIPPET_CHARS = 160` | Optional TypeSafe AI System One decision layer. |
+| `engine.rs` | `Engine::search`, `semantic`, `grep`, `glob`, `mark_same_names` | Ties routing, the three search modes and Jev together. |
+
+### CLI commands (`crates/cli/src/main.rs`)
+
+Global option: `--index <dir>` (default `$SAAN_INDEX_DIR` or `./.saan/index`).
+
+| Command | Arguments | Behaviour |
+|---|---|---|
+| `fetch-model` | — | Downloads the files in `MODEL_FILES` from `MODEL_REPO` into `$SAAN_MODEL_DIR` or `./models/<MODEL_DIR_NAME>`, skipping files already present (`.part` temp file then rename). |
+| `index <root>` | — | Builds the index, reusing unchanged files when a previous index loads. |
+| `search <query...>` | `-k <n>` (default 10), `--json` | Routed search; words are joined with spaces. |
+| `grep <pattern>` | `--root <dir>` (default `.`) | Direct regex search (no routing), prints `rel:line: text`. |
+| `glob <pattern>` | `--root <dir>` (default `.`) | Direct glob search (no routing). |
+| `eval <file>` | `-k <n>` (default 5), `--min <rate>` (default 0.8) | Top-k hit rate over `{query, expected}` cases; exits failure below `--min`. Uses a **local-only** engine (`Engine::new(..., None)`) so results are reproducible. |
+| `bench <file>` | `--runs <n>` (default 5), `--max-ms <ms>` (default 100) | Warm p50/p95/max latency over the eval queries; exits failure if p95 ≥ `--max-ms`. Also local-only. |
+
+`eval` and `bench` deliberately construct the engine with no `JevClient`, so Jev
+is never consulted during measurement.
+
+### Tauri commands (`src-tauri/src/main.rs`)
+
+| Command | Signature | Behaviour |
+|---|---|---|
+| `search` | `(query: String, k: Option<usize>)` | `Engine::search`; `k` defaults to 12. Errors if no index is loaded. |
+| `index_folder` | `(root: String)` | Validates the folder, saves it to `config.json`, rebuilds and swaps in the engine. |
+| `status` | — | `{ready, root, files, jev, hotkey, error}`; `hotkey` is the constant `Ctrl+Shift+Space`. |
+| `open_path` | `(path: String, reveal: bool)` | Opens with the default app, or reveals in the file manager, then hides the window. |
+| `hide_window` | — | Hides the `main` webview window. |
+
+App state is `AppState { engine: RwLock<Option<Engine>>, error: RwLock<Option<String>> }`.
+On startup the app registers the global shortcut `Ctrl+Shift+Space`; pressing it
+toggles the window. If `SAAN_ROOT` is set it (re)indexes that folder first,
+otherwise it loads the saved index. The window hides on focus loss, and
+`SAAN_SHOW` makes it visible at startup. Window config
+(`src-tauri/tauri.conf.json`): label `main`, 720×480, undecorated, always on
+top, centered, not resizable, skipped from the taskbar, initially hidden.
+
+### Frontend (`index.html`, `src/main.ts`)
+
+A single `#launcher` view: mode badge, query input, results listbox, folder
+setup form and status footer. It calls the Tauri commands via
+`@tauri-apps/api/core`'s `invoke`. Searches are debounced 40 ms and guarded by a
+sequence number so a stale response cannot overwrite a newer one. `↑`/`↓` move
+the selection, `Enter` opens, `Ctrl+Enter` reveals, `Escape` hides the window.
+Status is polled every 3 s and on window focus.
+
+## Query data flow
+
+`Engine::search(input, k)` in `crates/core/src/engine.rs`:
+
+1. **Local route.** `local_route(input)` returns a `Route { mode, query,
+   confidence, source }`.
+2. **Optional Jev route.** Only when `route.confidence < CONFIDENT` (0.75) *and*
+   a `JevClient` exists: one `POST /v1/systemone` asking for the mode. Any mode
+   (including the same one) sets `source = Jev`; if the returned mode differs it
+   is adopted, and when it is `grep` the raw input is `regex::escape`d so a
+   plain string is safe as a regex.
+3. **Dispatch.**
+   - `semantic` → `Embedder::embed_query` then `Index::search` (top-k files by
+     best-chunk cosine).
+   - `grep` → `grep::grep` with `GREP_HIT_LIMIT = 500`, one row per file (first
+     matching line), `score = 1.0`, `line` set.
+   - `glob` → `glob::glob`, `score = 1.0`, empty snippet.
+4. **Fallback to semantic.** If a *guessed* exact search (mode ≠ `semantic`, and
+   `source != Explicit`, i.e. the user did not type a prefix) returns no hits,
+   the route is replaced with a semantic search over the raw trimmed input.
+5. **Same-name marking.** `mark_same_names` sets `same_name = true` on every hit
+   whose lower-cased file name is shared with another hit in the response, so
+   the UI can badge them.
+6. **Optional Jev pick** (only `mode == semantic`, ≥ 2 hits, and a client):
+   ambiguous when the top-two score margin `< PICK_MARGIN (0.02)` or any of the
+   top `PICK_CANDIDATES (5)` hits has `same_name`. The top 5 are offered to
+   `JevClient::pick`, whose `pick_request` returns `None` at privacy level `a`
+   (so level `a` makes no pick call). A successful pick is moved to index 0.
+7. Returns `SearchResponse { route, hits, jev_calls, elapsed_ms }`.
+
+```mermaid
+flowchart TD
+  UI["Frontend index.html + src/main.ts"] -->|invoke| TC["Tauri commands main.rs"]
+  CLI["saan CLI main.rs"] --> ENG
+  TC --> ENG["Engine::search engine.rs"]
+  ENG --> LR["local_route router.rs"]
+  LR -->|confidence below CONFIDENT| JEV["JevClient jev.rs POST /v1/systemone"]
+  ENG --> SEM["semantic: Embedder + Index::search"]
+  ENG --> GR["grep.rs"]
+  ENG --> GL["glob.rs"]
+  SEM --> EMB["Embedder embed.rs EmbeddingGemma q4 ONNX"]
+  SEM --> IDX["Index index.rs"]
+  IDX --> EX["extract.rs"]
+  IDX --> CH["chunk.rs"]
+  JEV --> PICK["pick top candidate (privacy b/c)"]
+  PICK --> ENG
+```
+
+## Index format
+
+Two files, written by `Index::save` and read by `Index::load`:
+
+- **`meta.json`** — `{ version: 1, root, dim, files: [{ rel, size, mtime }],
+  chunks: [{ file, preview }] }`. `rel` is root-relative with forward slashes;
+  `size` is bytes and `mtime` is seconds since the Unix epoch; `preview` is the
+  chunk text with whitespace collapsed, capped at `PREVIEW_CHARS = 240`; each
+  chunk refers to its file by index.
+- **`vectors.f32`** — row-major little-endian `f32`, one L2-normalised row of
+  `dim` values per chunk.
+
+`load` rejects an unsupported `version` and a vector-count mismatch (`chunks ×
+dim`). Search computes each row's dot product against the normalised query (so
+dot product = cosine), keeps the best chunk per file, sorts descending and
+truncates to `k`.
+
+### Incremental reuse
+
+`Index::build(root, embedder, previous, progress)`:
+
+- The previous index is used only when `previous.root == root.canonicalize()`
+  and `previous.dim == embedder.dim()`.
+- A file whose `rel` matches and whose `size` **and** `mtime` are unchanged is
+  copied from the previous index (chunks and vectors) without re-embedding and
+  counted in `files_reused`. Changed or new files are re-extracted and embedded.
+- Embedding is batched `EMBED_BATCH = 8` chunks at a time.
+- `BuildStats` reports `files_seen`, `files_indexed`, `files_reused`, `chunks`.
+
+Reuse is thus keyed on **size + mtime**, not content hashing.
+
+## Embedding
+
+- Model: **EmbeddingGemma-300m**, 4-bit ONNX (`onnx/model_q4.onnx` plus
+  `onnx/model_q4.onnx_data`, constant `MODEL_FILE`), tokenizer and config from the public repo
+  `onnx-community/embeddinggemma-300m-ONNX`, stored under
+  `models/embeddinggemma-300m` (name `MODEL_DIR_NAME`).
+- Location resolved by `find_model_dir`: `$SAAN_MODEL_DIR`, else `models/<name>`
+  under the current dir or any ancestor of the current dir / executable,
+  requiring `tokenizer.json`.
+- Session: ONNX Runtime with `GraphOptimizationLevel::Level3` and
+  `intra_threads = $SAAN_THREADS` or `min(available_parallelism, 8)` (4 if unknown). Model
+  dimension is probed with `embed_query("probe")`.
+- Prompts: documents are `doc_prompt(title, text)` =
+  `title: {title} | text: {text}` where the title is `"{rel} ({file name})"`;
+  queries are prefixed with `task: search result | query: `.
+- Token caps: `MAX_DOC_TOKENS = 512`, `MAX_QUERY_TOKENS = 128`; the output
+  `sentence_embedding` is L2-normalised per row.
+- Chunks: ~1200 chars with 200 chars overlap (`chunk.rs`), so a chunk rarely
+  exceeds the doc token cap.
+
+## Jev privacy
+
+Jev (TypeSafe AI System One) is opt-in and off unless `SAAN_JEV` is
+`on`/`1`/`true` **and** `JEV_API_KEY` is set. Requests go to
+`POST {base}/v1/systemone` with `Authorization: Bearer <key>`, a 2500 ms global
+timeout, and model `SAAN_JEV_MODEL` (default `jev-latest`).
+
+| Level | Env value | Routing request | Candidate pick request |
+|---|---|---|---|
+| `a` (default) | `a` / `query` | query text | never sent |
+| `b` | `b` / `paths` | query text | query + candidate relative paths |
+| `c` | `c` / `snippets` | query text | query + candidate relative paths + snippets capped at `SNIPPET_CHARS = 160` |
+
+Absolute paths, file contents beyond the snippet, and index data are never sent.
+The route request body contains only the query at every level.
+
+## Environment variables
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `SAAN_MODEL_DIR` | `embed::find_model_dir`, CLI `fetch-model` | Model folder (also the download destination). |
+| `SAAN_INDEX_DIR` | CLI `index_dir` | Index folder when `--index` is not given. |
+| `SAAN_THREADS` | `Embedder::load` | ONNX Runtime intra-op threads (default `min(cores, 8)`). |
+| `SAAN_ROOT` | Tauri `startup` | Folder to (re)index at launch. |
+| `SAAN_SHOW` | Tauri `setup` | Show the window immediately at launch (any value). |
+| `SAAN_JEV` | `JevClient::from_env` | Enables Jev when `on`, `1` or `true`. |
+| `JEV_API_KEY` | `JevClient::from_env` | Bearer token; required for Jev. Read from nowhere else. |
+| `SAAN_JEV_PRIVACY` | `JevClient::from_env` | `a`/`query` (default), `b`/`paths`, `c`/`snippets`. |
+| `SAAN_JEV_URL` | `JevClient::from_env` | API base URL (default `https://api.typesafe.ai`); trailing `/` trimmed. |
+| `SAAN_JEV_MODEL` | `JevClient::from_env` | Model name (default `jev-latest`). |
+
+## Verification log
+
+| Date | Check | Result |
+|---|---|---|

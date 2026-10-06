@@ -1,0 +1,21 @@
+Home + auto insurance comparison (renewal due June 1)
+
+                     Current (Acme)   Option B (Bundle Co)   Option C (Mutual)
+Home premium/yr      $1,640           $1,380                 $1,450
+Auto premium/yr      $1,420           $1,190                 $1,260
+Bundle discount      none             included               8%
+Dwelling coverage    $450k            $480k                  $475k
+Home deductible      $1,000           $2,500                 $1,000
+Wind/hail deductible 1%               2%                     1%
+Liability            $300k            $300k                  $500k
+Auto liability       100/300/100      100/300/100            250/500/100
+Roadside assistance  yes              no ($15/yr add-on)     yes
+Rental car           $30/day          $40/day                $35/day
+Claims rating        3.8/5            3.2/5                  4.6/5
+
+Notes
+  - Option B is cheapest but the higher deductibles wipe out the savings with a single claim.
+  - Option C has much better liability limits; consider dropping the separate umbrella policy.
+  - Ask Option C about water backup coverage (we had a basement leak in 2023).
+
+Leaning toward: Option C.

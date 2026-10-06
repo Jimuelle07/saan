@@ -1,0 +1,17 @@
+Random side project ideas
+
+1. Plant watering reminder that reads a soil moisture sensor and texts me.
+2. Browser extension that hides the like counts on social media sites.
+3. A shared grocery list app for roommates that sorts by store aisle.
+4. Board game night scheduler: everyone marks availability, it picks the date.
+5. Tool that turns a recipe URL into a clean printable card with no ads.
+6. Neighborhood tool library - lend drills, ladders, tile saws.
+7. Bird feeder camera that identifies species with a small vision model.
+8. Habit tracker that only asks one question a day.
+9. Local-first expense splitter for trips (no account needed).
+10. Language exchange matching for people in the same city.
+
+Most promising: #5 and #9. Both are small, solve my own problem, and could be weekend builds.
+Least promising: #2 (already exists, many times over).
+
+Constraint: no more than one side project at a time. Finish before starting the next.

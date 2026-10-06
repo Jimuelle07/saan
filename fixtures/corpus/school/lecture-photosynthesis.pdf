@@ -1,0 +1,59 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 1425 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 750 Td
+(BIOL 110 - Lecture 12: Photosynthesis) Tj
+T* (Learning objectives) Tj
+T* (- Describe the light-dependent reactions and the Calvin cycle.) Tj
+T* (- Explain how C4 and CAM plants reduce photorespiration.) Tj
+T* (Overview) Tj
+T* (6 CO2 + 6 H2O + light energy -> C6H12O6 + 6 O2) Tj
+T* (Photosynthesis happens in chloroplasts. The thylakoid membranes hold the pigments;) Tj
+T* (the fluid around them is the stroma.) Tj
+T* (Light-dependent reactions \(thylakoid membrane\)) Tj
+T* (- Photosystem II absorbs light and splits water, releasing oxygen as a by-product.) Tj
+T* (- Electrons flow through the electron transport chain to Photosystem I.) Tj
+T* (- The proton gradient drives ATP synthase to make ATP.) Tj
+T* (- Photosystem I passes electrons to NADP+, forming NADPH.) Tj
+T* (Calvin cycle \(stroma\)) Tj
+T* (- The enzyme RuBisCO fixes CO2 onto ribulose bisphosphate \(RuBP\).) Tj
+T* (- ATP and NADPH from the light reactions reduce the products to G3P sugar.) Tj
+T* (- Most G3P regenerates RuBP; one in six molecules leaves to build glucose.) Tj
+T* (Photorespiration) Tj
+T* (RuBisCO sometimes grabs O2 instead of CO2, wasting energy, especially when hot and dry.) Tj
+T* (C4 plants \(corn, sugarcane\) concentrate CO2 in bundle sheath cells.) Tj
+T* (CAM plants \(cacti, pineapple\) open stomata only at night to save water.) Tj
+T* (Exam reminder: know the inputs and outputs of each stage.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1820
+%%EOF

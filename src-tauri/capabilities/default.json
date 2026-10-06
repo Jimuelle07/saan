@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Launcher window: only saan's own commands; files are opened from Rust.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

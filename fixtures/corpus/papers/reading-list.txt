@@ -1,0 +1,22 @@
+Research reading list - grad seminar, spring term
+
+Week 1  Ocean warming and reef ecosystems
+        - Hughes et al. 2017, "Global warming and recurrent mass bleaching of corals", Nature
+        - Baker et al. 2008, "Climate change and coral reef bleaching", review
+
+Week 2  Deep learning foundations
+        - Vaswani et al. 2017, "Attention is all you need"
+        - Devlin et al. 2019, BERT
+
+Week 3  Sleep science
+        - Walker and Stickgold 2006, "Sleep, memory, and plasticity"
+        - Diekelmann and Born 2010, "The memory function of sleep"
+
+Week 4  Urban climate
+        - Oke 1982, "The energetic basis of the urban heat island"
+
+Week 5  Open topic - each student presents one paper
+
+Format: 2 page response paper due before each session. Discussion leader rotates.
+Grading: 40% responses, 30% participation, 30% final presentation.
+Office hours: Wednesdays 2-4pm, room 318.

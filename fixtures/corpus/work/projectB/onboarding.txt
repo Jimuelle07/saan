@@ -1,0 +1,26 @@
+New engineer onboarding checklist - ClinicBook team
+
+Day 1
+  - Laptop setup: Xcode, Android Studio, Node 20, Yarn, Watchman
+  - Get access: GitHub org, Jira project, Slack channels #clinicbook and #clinicbook-alerts
+  - Complete the HIPAA privacy training module (required before touching production data)
+  - Meet your onboarding buddy
+
+Week 1
+  - Build and run the app on a simulator and on a physical device
+  - Read the architecture doc and the GraphQL schema
+  - Pick up a "good first issue" ticket and open a pull request
+  - Shadow the release manager during a release
+
+Week 2
+  - Join the on-call rotation as secondary (shadow only)
+  - Present one thing you learned at the Friday demo
+
+Accounts you will need
+  - Apple developer account (ask the team lead)
+  - Firebase console read access
+  - TestFlight tester invite
+
+Tips
+  - Use the demo patient account "Jane Testpatient" for screenshots.
+  - The staging clinics reset their schedules every night at midnight UTC.

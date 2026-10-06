@@ -1,0 +1,64 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 1867 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 750 Td
+(Summary: The Transformer Architecture and Self-Attention) Tj
+T* (Reading group handout - Week 2) Tj
+T* (1. Motivation) Tj
+T* (Recurrent networks process tokens one at a time, which makes training slow and makes it) Tj
+T* (hard to learn dependencies between distant words. The Transformer drops recurrence entirely) Tj
+T* (and relies on attention to relate every position in a sequence to every other position.) Tj
+T* (2. Scaled dot-product attention) Tj
+T* (Each token is projected into a query Q, a key K and a value V. The output is) Tj
+T* (softmax\(Q K^T / sqrt\(d_k\)\) V. Dividing by the square root of the key dimension keeps the) Tj
+T* (dot products from growing too large, which would push the softmax into tiny gradients.) Tj
+T* (3. Multi-head attention) Tj
+T* (Instead of one attention function, the model runs h heads in parallel on smaller) Tj
+T* (projections and concatenates the results. Different heads learn different relations,) Tj
+T* (for example syntax in one head and coreference in another.) Tj
+T* (4. Positional encoding) Tj
+T* (Attention has no notion of order, so sine and cosine signals of different frequencies) Tj
+T* (are added to the input embeddings to encode each token's position.) Tj
+T* (5. Encoder and decoder) Tj
+T* (The encoder stacks self-attention and feed-forward layers with residual connections and) Tj
+T* (layer normalization. The decoder adds masked self-attention so a position cannot look at) Tj
+T* (future tokens, plus cross-attention over the encoder output.) Tj
+T* (6. Cost) Tj
+T* (Self-attention is quadratic in sequence length, which motivates later work on sparse) Tj
+T* (and linear attention variants.) Tj
+T* (Discussion questions) Tj
+T* (- Why does the model need both residual connections and layer normalization?) Tj
+T* (- What is lost by replacing recurrence with attention?) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2262
+%%EOF

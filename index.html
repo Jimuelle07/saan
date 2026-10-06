@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>saan</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main id="launcher">
+      <div class="bar">
+        <span id="mode" class="mode">semantic</span>
+        <input id="query" type="text" placeholder="saan? describe it, grep: text, glob: *.pdf" autocomplete="off" spellcheck="false" autofocus />
+        <span id="timing" class="timing"></span>
+      </div>
+      <ul id="results" role="listbox"></ul>
+      <form id="setup" class="setup" hidden>
+        <input id="root" type="text" placeholder="Folder to index, e.g. C:\Users\you\Documents" spellcheck="false" />
+        <button type="submit">Index</button>
+      </form>
+      <footer id="status"></footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

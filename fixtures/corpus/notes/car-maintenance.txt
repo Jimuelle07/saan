@@ -1,0 +1,22 @@
+Car maintenance record - 2019 Honda CR-V
+
+Mileage at purchase: 31,400
+
+2024-02-10  38,900  Oil change (0W-20 synthetic), new cabin air filter        $89
+2024-06-22  43,100  Tire rotation, checked brake pads (7mm front)              $25
+2024-11-03  47,800  Oil change, replaced wiper blades                          $102
+2025-03-15  51,200  New all-season tires (set of 4), alignment                 $780
+2025-08-30  56,000  Oil change, engine air filter, tire rotation               $130
+2026-01-12  60,400  Brake pads front, rotors resurfaced                        $340
+2026-01-12  60,400  Battery test: 72% health, replace before next winter
+
+Upcoming
+  - Transmission fluid change around 60-65k (dealer says CVT fluid every 25k-30k)
+  - Coolant flush at 100k or 10 years
+  - Spark plugs at 105k
+  - Inspection sticker due in September
+
+Notes
+  - Maintenance Minder code "B1" = oil change + tire rotation
+  - Tire pressure 35 psi front and back, cold
+  - Independent shop on Grand Ave is cheaper than the dealer and honest

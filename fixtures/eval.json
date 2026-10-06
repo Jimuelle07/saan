@@ -1,0 +1,186 @@
+[
+  {
+    "query": "how long should bread dough rest in the fridge before baking it in a dutch oven",
+    "expected": "recipes/sourdough.md"
+  },
+  {
+    "query": "fermenting spicy napa cabbage with red pepper flakes in a jar",
+    "expected": "recipes/kimchi.txt"
+  },
+  {
+    "query": "egg-free cookie dough that has to be chilled because coconut oil makes it spread",
+    "expected": "recipes/vegan-chocolate-chip-cookies.md"
+  },
+  {
+    "query": "simmering beef bones with star anise and charred ginger for a vietnamese noodle soup",
+    "expected": "recipes/pho.md"
+  },
+  {
+    "query": "smoky yogurt-marinated chicken in a creamy tomato curry sauce",
+    "expected": "recipes/chicken-tikka-masala.md"
+  },
+  {
+    "query": "day by day plan for visiting temples in Japan during the autumn foliage season",
+    "expected": "travel/kyoto/itinerary.md"
+  },
+  {
+    "query": "what clothes and gear to bring for a road trip past glaciers, waterfalls and hot springs",
+    "expected": "travel/iceland/packing-list.txt"
+  },
+  {
+    "query": "what to pack when you take your shoes off a lot at shrines and need cash in yen",
+    "expected": "travel/kyoto/packing-list.txt"
+  },
+  {
+    "query": "where to get custard tarts and garlic prawns in Portugal's capital",
+    "expected": "travel/lisbon-restaurants.md"
+  },
+  {
+    "query": "which documents to collect before itemizing deductions on my annual return",
+    "expected": "finance/tax-deductions-checklist.md"
+  },
+  {
+    "query": "is it worth getting a lower interest rate on the home loan given closing costs and break-even",
+    "expected": "finance/mortgage-refinance-notes.md"
+  },
+  {
+    "query": "how to split savings between pretax and Roth accounts so we can stop working at sixty",
+    "expected": "finance/retirement-plan.pdf"
+  },
+  {
+    "query": "ocean heatwaves causing corals to expel their symbiotic algae and die",
+    "expected": "papers/coral-bleaching-thesis.pdf"
+  },
+  {
+    "query": "why queries and keys get divided by the square root of the dimension in neural language models",
+    "expected": "papers/transformer-attention-summary.pdf"
+  },
+  {
+    "query": "does deep sleep help students remember what they studied the day before",
+    "expected": "papers/sleep-and-memory-review.pdf"
+  },
+  {
+    "query": "why downtown areas are hotter than the countryside and how street trees help cool them",
+    "expected": "papers/urban-heat-islands.pdf"
+  },
+  {
+    "query": "how plants turn light, water and carbon dioxide into sugar inside chloroplasts",
+    "expected": "school/lecture-photosynthesis.pdf"
+  },
+  {
+    "query": "license renewal terms and liability cap negotiations with the warehouse software supplier",
+    "expected": "work/projectA/vendor-contract-summary.pdf"
+  },
+  {
+    "query": "cheapest route between nodes in a weighted graph using a priority queue",
+    "expected": "code/rust/dijkstra.rs"
+  },
+  {
+    "query": "a fixed-size cache that throws out whatever was used longest ago",
+    "expected": "code/rust/lru_cache.rs"
+  },
+  {
+    "query": "bucket of tokens that refills over time to cap how often each api key can call us",
+    "expected": "code/go/rate_limiter.go"
+  },
+  {
+    "query": "web server with a health check endpoint that shuts down cleanly on SIGTERM",
+    "expected": "code/go/http_server.go"
+  },
+  {
+    "query": "database tables for books, library cards, borrowing and late returns",
+    "expected": "code/sql/library_schema.sql"
+  },
+  {
+    "query": "query computing revenue per region each month and growth compared to the previous month",
+    "expected": "code/sql/sales_report.sql"
+  },
+  {
+    "query": "checklist app in the browser saved to local storage without any framework",
+    "expected": "code/web/todo-app.ts"
+  },
+  {
+    "query": "wait until the user stops typing before calling the search endpoint",
+    "expected": "code/web/debounce.js"
+  },
+  {
+    "query": "group 2d points into clusters with smart random seeding and an elbow plot",
+    "expected": "code/python/kmeans.py"
+  },
+  {
+    "query": "script that warns me when overnight temperatures drop low enough to cover the garden",
+    "expected": "code/python/scrape_weather.py"
+  },
+  {
+    "query": "categorize credit card spending from a csv into groceries, dining and transport per month",
+    "expected": "code/python/budget_analyzer.py"
+  },
+  {
+    "query": "homework helper functions for checking primes and computing the greatest common divisor",
+    "expected": "school/cs101/utils.py"
+  },
+  {
+    "query": "helpers that parse bank export dates and dollar amounts and clean up merchant names",
+    "expected": "code/python/utils.py"
+  },
+  {
+    "query": "helpers for formatting prices, making url slugs and showing how long ago something happened",
+    "expected": "code/web/utils.ts"
+  },
+  {
+    "query": "overview and local setup instructions for the service that keeps warehouse stock in sync with the online shop",
+    "expected": "work/projectA/README.md"
+  },
+  {
+    "query": "getting started guide for the mobile app patients use to book doctor visits",
+    "expected": "work/projectB/README.md"
+  },
+  {
+    "query": "residents voting on replacing the playground and complaining about blocked driveways",
+    "expected": "notes/meeting-notes.md"
+  },
+  {
+    "query": "decision to launch real-time stock updates gradually behind a feature flag in August",
+    "expected": "work/projectA/meeting-notes.md"
+  },
+  {
+    "query": "personal errands like renewing my passport and taking the dog for vaccinations",
+    "expected": "notes/todo.txt"
+  },
+  {
+    "query": "engineering tasks like fixing an unreliable CI test and preparing slides for the board",
+    "expected": "work/todo.txt"
+  },
+  {
+    "query": "what went badly when Apple rejected our build during the last sprint",
+    "expected": "work/projectB/retro.md"
+  },
+  {
+    "query": "strengthening routine for a sore kneecap with wall sits and clamshells",
+    "expected": "health/physical-therapy-exercises.md"
+  },
+  {
+    "query": "cholesterol and vitamin D numbers from my yearly checkup",
+    "expected": "health/blood-test-results.txt"
+  },
+  {
+    "query": "when does a substitution reaction flip stereochemistry versus go through a carbocation",
+    "expected": "school/organic-chemistry-notes.txt"
+  },
+  {
+    "query": "plan for an essay arguing why the great war broke out in 1914",
+    "expected": "school/history-essay-outline.md"
+  },
+  {
+    "query": "weekly running schedule building long runs up to twelve miles for a race in October",
+    "expected": "notes/half-marathon-training.md"
+  },
+  {
+    "query": "tomato plants getting blossom end rot and aphids on the beans",
+    "expected": "notes/gardening-log.md"
+  },
+  {
+    "query": "separate wifi network for smart home devices and an ad-blocking dns box",
+    "expected": "notes/home-network-setup.txt"
+  }
+]

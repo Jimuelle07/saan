@@ -1,0 +1,27 @@
+Home network setup notes
+
+ISP: fiber, 500/500 Mbps. ONT is in the basement next to the electrical panel.
+
+Router: mesh system, 3 nodes
+  - main node: basement office, wired to ONT
+  - node 2: living room bookshelf (wired backhaul via ethernet in the wall)
+  - node 3: upstairs hallway (wireless backhaul)
+
+SSIDs
+  - "Home" : WPA3, everyone's laptops and phones
+  - "Home-IoT" : WPA2, smart plugs, thermostat, robot vacuum, isolated VLAN
+  - "Guest" : client isolation on, 50 Mbps cap
+
+DHCP reservations
+  192.168.1.10  NAS (Synology, RAID 1, 2x4TB)
+  192.168.1.20  printer
+  192.168.1.30  Raspberry Pi running Pi-hole for ad blocking
+
+DNS: Pi-hole upstream is Quad9. Router hands out the Pi-hole as primary DNS.
+
+Troubleshooting
+  - If the upstairs speed drops, reboot node 3 first.
+  - Printer loses its IP after power outages; reservation fixed that.
+  - Firmware auto-update window: Sundays 3am.
+
+Admin password is in the password manager under "mesh router".

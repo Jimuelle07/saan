@@ -1,0 +1,25 @@
+ORGANIC CHEMISTRY II - Lecture 7 notes: nucleophilic substitution
+
+SN2 (bimolecular)
+  - One step, concerted. Nucleophile attacks from the back side as the leaving group leaves.
+  - Rate = k[substrate][nucleophile]
+  - Inversion of configuration (Walden inversion) at the stereocenter.
+  - Favored by: methyl > primary > secondary. Tertiary basically never (steric hindrance).
+  - Strong nucleophiles (I-, CN-, RS-, OH-), polar APROTIC solvents (DMSO, DMF, acetone).
+
+SN1 (unimolecular)
+  - Two steps: leaving group departs -> carbocation, then nucleophile attacks.
+  - Rate = k[substrate] only.
+  - Racemization (attack from either face of the planar carbocation), often slight excess inversion.
+  - Favored by: tertiary > secondary. Carbocation stability, resonance (allylic, benzylic).
+  - Weak nucleophiles (H2O, ROH), polar PROTIC solvents.
+  - Watch for carbocation rearrangements: hydride and methyl shifts.
+
+Leaving groups: good ones are weak bases. I- > Br- > Cl- >> F-. Tosylate is excellent.
+OH- is bad -> protonate it or convert to tosylate first.
+
+Competition with elimination (E1/E2)
+  - Strong, bulky base (t-BuO-) -> E2
+  - Heat favors elimination over substitution.
+
+Exam tip: identify substrate degree first, then nucleophile strength, then solvent.

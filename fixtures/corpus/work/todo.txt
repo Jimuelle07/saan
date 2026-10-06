@@ -1,0 +1,24 @@
+WORK TODO - sprint 14
+
+High priority
+- Fix the flaky integration test in the payments service (timeouts on CI only)
+- Review Priya's pull request for the new caching layer
+- Update the CI pipeline to use the new runner images
+- Prepare slides for the quarterly board update (revenue, churn, hiring)
+
+Medium
+- Write the postmortem for last Tuesday's outage (DNS misconfiguration)
+- Rotate the staging database credentials
+- Respond to the legal team about the data retention policy
+- Pair with the new intern on the logging cleanup
+
+Low
+- Clean up stale feature flags older than 90 days
+- Update the team wiki page on deploy procedures
+- Order a new monitor arm for the desk
+
+Waiting on others
+- Security sign-off for the SSO rollout (owner: Marcus)
+- Budget approval for two extra contractor seats
+
+Reminder: 1:1 with manager moved to Thursday 2pm.

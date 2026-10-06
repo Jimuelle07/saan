@@ -1,4 +1,6 @@
-# Barracuda — idea
+# saan — idea
+
+*saan* is Filipino for "where": the question you ask when looking for a file.
 
 A privacy-first, local launcher that replaces slow exact-string file exploration
 (e.g. Windows File Explorer search) with three fast ways to find a file:
@@ -16,7 +18,7 @@ their full, distinct path so they can be told apart.
 
 - **Local by default.** Files are embedded on-device with
   [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
-  (300M params, int8 ONNX, ~310 MB). No file data leaves the machine unless the user
+  (300M params, 4-bit ONNX `model_q4.onnx`, ~197 MB). No file data leaves the machine unless the user
   opts into the Jev router.
 - **Fast.** Rust backend, brute-force cosine search over an in-memory index,
   target p95 < 100 ms per warm query.

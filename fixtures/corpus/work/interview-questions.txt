@@ -1,0 +1,26 @@
+Interview question bank - backend engineer loop
+
+Warm-up
+  - Tell me about a system you built that you are proud of. What would you change now?
+
+Coding (45 min)
+  - Implement a rate limiter that allows N requests per user per minute.
+  - Merge overlapping intervals; follow-up: stream of intervals arriving out of order.
+  - Find the top K most frequent words in a large log file that doesn't fit in memory.
+
+System design (60 min)
+  - Design a URL shortener. Discuss ID generation, redirects, analytics, abuse.
+  - Design a notification service that sends email, SMS and push with user preferences.
+
+Behavioral
+  - Describe a disagreement with a teammate and how it was resolved.
+  - Tell me about a production incident you handled. What did the postmortem change?
+  - When did you push back on a deadline?
+
+Scorecard dimensions
+  - Problem solving, code quality, communication, system thinking, collaboration
+  - Score 1-4 per dimension; write evidence, not impressions.
+
+Reminders for interviewers
+  - Leave 5 minutes for the candidate's questions.
+  - Submit feedback within 24 hours, before reading other interviewers' notes.
