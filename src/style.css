@@ -31,6 +31,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .name { font-weight: 600; }
 .badge { margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #3a3220; color: #e0b85a; }
 .rel { color: var(--dim); font-size: 12px; }
+.setup[hidden] { display: none; }
 .snippet { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .empty { color: var(--dim); padding: 14px; }

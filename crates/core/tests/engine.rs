@@ -1,0 +1,187 @@
+//! Integration tests for [`saan_core::Engine`]: routing, semantic search, the
+//! guessed-search fallback and incremental reindexing, over a small copy of
+//! `fixtures/corpus`.
+//!
+//! Every test needs the EmbeddingGemma model (`models/embeddinggemma-300m`).
+//! When [`saan_core::embed::find_model_dir`] finds nothing the test prints
+//! `skipping: model not found` and passes, so the suite is green on machines
+//! without the (gitignored, ~200 MB) model. `Engine` owns its `Embedder`, so
+//! each test loads the model itself: that is why there are only a handful of
+//! tests and why each one indexes a fixed subset rather than the whole corpus.
+//!
+//! Tests run with cwd `crates/core`, so `find_model_dir` walks up to the repo's
+//! `models/` folder; the corpus is read from `<repo>/fixtures/corpus`.
+
+use std::path::{Path, PathBuf};
+
+use saan_core::embed::Embedder;
+use saan_core::router::{CONFIDENT, RouteSource};
+use saan_core::{Engine, Index, Mode};
+
+/// The corpus files each test indexes: recipes, code, notes, a PDF and both
+/// same-name pairs the tests assert on. Small so the model stays fast.
+const SUBSET: &[&str] = &[
+    "code/rust/dijkstra.rs",
+    "notes/meeting-notes.md",
+    "notes/todo.txt",
+    "papers/coral-bleaching-thesis.pdf",
+    "recipes/sourdough.md",
+    "work/projectA/README.md",
+    "work/projectB/README.md",
+    "work/todo.txt",
+];
+
+/// `crates/core/../../fixtures/corpus` = `<repo>/fixtures/corpus`.
+fn corpus() -> PathBuf {
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/corpus"))
+}
+
+/// Load the embedder, or print the skip notice and return `None` without it.
+fn embedder_or_skip() -> Option<Embedder> {
+    let Some(model_dir) = saan_core::embed::find_model_dir() else {
+        println!("skipping: model not found");
+        return None;
+    };
+    Some(Embedder::load(&model_dir).expect("loading embedder"))
+}
+
+/// A fresh temp tree holding [`SUBSET`] with its relative paths intact, or
+/// `None` (after printing the skip notice) when the model is missing. The name
+/// is unique per test process and test so parallel tests never share a tree.
+fn fresh_subset_root(test: &str) -> Option<PathBuf> {
+    if saan_core::embed::find_model_dir().is_none() {
+        println!("skipping: model not found");
+        return None;
+    }
+    let root = std::env::temp_dir().join(format!("saan-engine-{}-{test}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for rel in SUBSET {
+        let dest = root.join(rel);
+        std::fs::create_dir_all(dest.parent().expect("subset paths have a parent"))
+            .expect("creating temp dirs");
+        std::fs::copy(corpus().join(rel), &dest).unwrap_or_else(|e| panic!("copying {rel}: {e}"));
+    }
+    Some(root)
+}
+
+/// Index `root` and wrap it in an `Engine` with Jev disabled. Returns the engine
+/// and the canonical temp root (so callers can clean it up), or `None` when the
+/// model is missing.
+fn engine_for(root: &Path) -> Option<(Engine, PathBuf)> {
+    let embedder = embedder_or_skip()?;
+    let (index, _stats) = Index::build(root, &embedder, None, |_| {}).expect("building index");
+    let temp_root = index.root.clone();
+    Some((Engine::new(index, embedder, None), temp_root))
+}
+
+#[test]
+fn semantic_paraphrase_ranks_sourdough_first() {
+    let Some(dir) = fresh_subset_root("semantic") else { return };
+    let Some((engine, temp_root)) = engine_for(&dir) else { return };
+
+    // Paraphrase from fixtures/eval.json (expected: recipes/sourdough.md).
+    let response = engine
+        .search(
+            "how long should bread dough rest in the fridge before baking it in a dutch oven",
+            5,
+        )
+        .expect("searching");
+
+    assert_eq!(response.route.mode, Mode::Semantic);
+    assert_eq!(response.route.source, RouteSource::Rules);
+    assert_eq!(response.hits[0].rel, "recipes/sourdough.md");
+    assert_eq!(response.hits[0].name, "sourdough.md");
+    assert!(response.hits[0].score > 0.0);
+    assert!(!response.hits[0].snippet.is_empty());
+    assert!(!response.hits[0].same_name);
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn guessed_glob_falls_back_to_semantics_but_explicit_glob_does_not() {
+    let Some(dir) = fresh_subset_root("fallback") else { return };
+    let Some((engine, temp_root)) = engine_for(&dir) else { return };
+
+    // Looks like a file name, so the local rules guess glob; nothing matches, so
+    // an inexact (non-explicit) route falls back to meaning.
+    let guessed = engine.search("nonexistent-file.txt", 5).expect("searching");
+    assert_eq!(guessed.route.mode, Mode::Semantic);
+    assert_eq!(guessed.route.source, RouteSource::Rules);
+    assert!(!guessed.hits.is_empty(), "guessed glob should fall back to semantic hits");
+
+    // An explicit prefix is honoured even when it finds nothing.
+    let explicit = engine.search("glob:nonexistent-file.txt", 5).expect("searching");
+    assert_eq!(explicit.route.mode, Mode::Glob);
+    assert_eq!(explicit.route.source, RouteSource::Explicit);
+    assert!(explicit.hits.is_empty());
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn same_name_files_are_reported_separately() {
+    let Some(dir) = fresh_subset_root("same-name") else { return };
+    let Some((engine, temp_root)) = engine_for(&dir) else { return };
+
+    let response = engine.search("todo.txt", 10).expect("searching");
+    assert_eq!(response.route.mode, Mode::Glob);
+
+    let mut rels: Vec<&str> = response.hits.iter().map(|h| h.rel.as_str()).collect();
+    rels.sort_unstable();
+    assert_eq!(rels, ["notes/todo.txt", "work/todo.txt"]);
+    assert!(response.hits.iter().all(|h| h.name == "todo.txt" && h.same_name));
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn rebuild_reuses_unchanged_files_and_reindexes_the_changed_one() {
+    let Some(dir) = fresh_subset_root("incremental") else { return };
+    let Some(embedder) = embedder_or_skip() else { return };
+
+    let (first, stats) = Index::build(&dir, &embedder, None, |_| {}).expect("building index");
+    assert_eq!(stats.files_seen, SUBSET.len(), "every copied file is walked");
+    let files = first.files.len();
+    assert_eq!(stats.files_indexed, files);
+    assert!(
+        first.files.iter().any(|f| f.rel == "papers/coral-bleaching-thesis.pdf"),
+        "PDF text is indexed"
+    );
+
+    // Nothing changed: every file comes from the previous index.
+    let (reused, stats) =
+        Index::build(&dir, &embedder, Some(&first), |_| {}).expect("rebuilding index");
+    assert_eq!(stats.files_indexed, 0);
+    assert_eq!(stats.files_reused, files);
+    assert_eq!(reused.files.len(), files);
+
+    // A different length changes the (size, mtime) stamp, so exactly this file
+    // is re-extracted and re-embedded.
+    let rewritten = "sourdough schedule: feed the starter twice a day for a week, then bake.";
+    std::fs::write(dir.join("recipes/sourdough.md"), rewritten).expect("rewriting a corpus file");
+    let (_, stats) =
+        Index::build(&dir, &embedder, Some(&reused), |_| {}).expect("rebuilding index");
+    assert_eq!(stats.files_indexed, 1);
+    assert_eq!(stats.files_reused, files - 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn jev_is_never_called_when_disabled() {
+    let Some(dir) = fresh_subset_root("jev-disabled") else { return };
+    let Some((engine, temp_root)) = engine_for(&dir) else { return };
+
+    assert!(!engine.jev_enabled());
+
+    // A lone identifier routes below CONFIDENT, which is exactly when an enabled
+    // Jev would have been asked to route/pick; with Jev disabled it is silent.
+    let response = engine.search("dijkstra", 5).expect("searching");
+    assert_eq!(response.route.mode, Mode::Semantic);
+    assert!(response.route.confidence < CONFIDENT);
+    assert_eq!(response.jev_calls, 0);
+    assert!(!response.hits.is_empty());
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
