@@ -206,3 +206,12 @@ The route request body contains only the query at every level.
 
 | Date | Check | Result |
 |---|---|---|
+| 2026-10-07 | `cargo build --release` (workspace) | exit 0 |
+| 2026-10-07 | `cargo test --workspace` | exit 0: 4 unit + 12 grep/glob + 1 Jev + 5 engine tests pass |
+| 2026-10-07 | `npm run build` | exit 0 |
+| 2026-10-07 | `cargo tauri build --debug` (tauri-cli 2.12.1 from `.tools/bin`) | exit 0 |
+| 2026-10-07 | `saan index fixtures/corpus` | 62 files, 96 chunks, ~50 s on CPU |
+| 2026-10-07 | `saan eval fixtures/eval.json` | top-5 hit rate 46/46 = 100% (min 80%) |
+| 2026-10-07 | `saan bench fixtures/eval.json` (release, i5-13420H CPU) | p50 61.2 ms, p95 84.6 ms (limit 100 ms). The int8 `model_quantized.onnx` gave p95 ~200 ms, so the default switched to `model_q4.onnx` |
+| 2026-10-07 | Launcher smoke | Ctrl+Shift+Space showed the window; `todo.txt` → both files with "same name" badges (23 ms); a semantic query ranked `notes/todo.txt` first; Enter opened it in Notepad and hid the launcher |
+| 2026-10-07 | History scan | no model weights, `.saan/`, `.env`, Jev keys, or Co-authored-by trailers |
