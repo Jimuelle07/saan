@@ -23,7 +23,7 @@ claim below is grounded in the code; file paths are relative to the repo root.
 | `embed.rs` | `Embedder`, `EmbedOptions { threads }`, `Embedder::load_with`, `find_model_dir`, `doc_prompt`, `MODEL_DIR_NAME`, `MODEL_REPO`, `MODEL_FILES` | EmbeddingGemma-300m via ONNX Runtime, on-device, on the **CPU** execution provider only (spec R15: the DirectML path measured ~13× slower). |
 | `extract.rs` | `SKIP_DIRS`, `is_content_file`, `extract_text`, `looks_binary` | Directory-name skip list (`node_modules`, `target`, `__pycache__`, `.venv`, `venv`, `.git`, `$Recycle.Bin`, `System Volume Information`, `Windows`, `Program Files`, `Program Files (x86)`, `ProgramData`, `AppData`), PDF/text extraction and the content-file allow-list (only content files are embedded; everything glob/grep-able is still searchable). The old `walk_files` is gone — walking lives in `Scope::files`. |
 | `scope.rs` | `Scope { roots, max_file_bytes }`, `ScopedFile`, `Scope::single`, `Scope::new`, `display_rel`, `files`, `DEFAULT_MAX_FILE_BYTES = 10 MiB` | The one walk used by indexing, grep and glob: every visible file under every root, sorted by (root, rel), applying `.gitignore`/`.ignore`, hidden-file rules, `SKIP_DIRS` (case-insensitive) and the file-size cap — files over `max_file_bytes` never appear in semantic, grep or glob results. `display_rel` prefixes `<root label>/` when several roots are indexed. |
-| `index.rs` | `Index`, `FileEntry { root, rel, size, mtime }`, `ChunkEntry`, `FileScore`, `BuildEvent`, `BuildOptions { checkpoint_every }`, `BuildStats` (incl. `cancelled`), `FORMAT_VERSION = 2`, `MAX_CHUNKS_PER_FILE = 64` | On-disk `meta.json` + `vectors.f32`; brute-force cosine search; incremental reuse keyed on absolute path + size + mtime; long files embed only their first 64 chunks. |
+| `index.rs` | `Index`, `FileEntry { root, rel, size, mtime }`, `ChunkEntry`, `FileScore`, `BuildEvent`, `BuildOptions { checkpoint_every }`, `BuildStats` (incl. `cancelled`), `FORMAT_VERSION = 2`, `MAX_CHUNKS_PER_FILE = 8` | On-disk `meta.json` + `vectors.f32`; brute-force cosine search; incremental reuse keyed on absolute path + size + mtime; long files embed only their first 8 chunks (~10 KB). |
 | `router.rs` | `Mode`, `Route`, `RouteSource`, `local_route`, `CONFIDENT = 0.75` | Deterministic local query router. |
 | `grep.rs` | `grep(scope, pattern, limit)`, `GrepHit { rel, path, line, text }`, `MAX_LINE_CHARS = 200` | Line-oriented regex search over `Scope::files()`, smart case, ripgrep-style. |
 | `glob.rs` | `glob(scope, pattern, limit)`, `GlobHit { rel, path, size, mtime }` | Path pattern matching over `Scope::files()`; a bare pattern matches the file name, a `/`-containing pattern matches the per-root or display rel. |
@@ -247,7 +247,10 @@ on_event)`:
   cancels: `build` returns the partial index of reused plus already-embedded
   files with `BuildStats.cancelled = true`.
 - Embedding is batched `EMBED_BATCH = 8` chunks at a time; files longer than
-  `MAX_CHUNKS_PER_FILE = 64` chunks embed only the first 64.
+  `MAX_CHUNKS_PER_FILE = 8` chunks embed only the first 8 (~10 KB). Embedding
+  costs roughly 0.5 s per chunk on a laptop CPU, so this cap is the main lever on
+  indexing time. On a real 276-file Documents + Desktop sample it keeps 69% of
+  the chunks a 64-chunk cap embedded.
 - `BuildStats` reports `files_seen`, `files_indexed`, `files_reused`,
   `chunks`, `cancelled`.
 

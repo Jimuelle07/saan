@@ -167,7 +167,18 @@ foreach ($name in @('saan', 'saan-app')) {
     if (-not (Test-Path $source)) {
         throw "$source not found; build first (or drop -SkipBuild)"
     }
-    Copy-Item -Path $source -Destination (Join-Path $BinDir ("{0}{1}" -f $name, $ExeSuffix)) -Force
+    $dest = Join-Path $BinDir ("{0}{1}" -f $name, $ExeSuffix)
+    # Windows can hold the image file open briefly after the launcher exits.
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            Copy-Item -Path $source -Destination $dest -Force
+            break
+        }
+        catch [System.IO.IOException] {
+            if ($attempt -ge 10) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
 }
 
 if (-not (Test-Path (Join-Path $ModelDir 'tokenizer.json'))) {

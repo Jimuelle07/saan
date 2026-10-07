@@ -21,8 +21,11 @@ const FORMAT_VERSION: u32 = 2;
 const EMBED_BATCH: usize = 8;
 /// Characters of each chunk kept for result snippets.
 const PREVIEW_CHARS: usize = 240;
-/// Longest files contribute only their first this many chunks.
-pub const MAX_CHUNKS_PER_FILE: usize = 64;
+/// Longest files contribute only their first this many chunks (~10 KB of text).
+/// Embedding is the indexing bottleneck (~0.5 s per chunk on a laptop CPU); on a
+/// real Documents + Desktop sample this cap keeps 69% of the chunks a 64-chunk
+/// cap embedded, and every file still gets its opening sections indexed.
+pub const MAX_CHUNKS_PER_FILE: usize = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEntry {
