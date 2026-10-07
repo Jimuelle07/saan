@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/saan-demo.gif" alt="saan demo: Ctrl+Shift+Space opens the launcher; a plain-English query finds a file by meaning, grep: finds text inside files, glob: finds files by name and tells same-name files apart" width="800">
+
 # saan
 
 *saan* is Filipino for **"where?"** — the question you ask when you're looking for a file.
@@ -330,6 +332,49 @@ unknown) and `ext` (lowercase extension without the dot, empty if none).
 ---
 
 ## Architecture
+
+### How it works
+
+```mermaid
+flowchart TB
+  subgraph INDEX["① Index your folders · background, resumable"]
+    FOLDERS[/"Your folders"/] --> WALK["Walk<br/>.gitignore · skipped dirs · size cap"]
+    WALK --> CHANGED{"New or changed?<br/>path + size + mtime"}
+    CHANGED -->|"yes"| EXTRACT["Extract text<br/>PDF · docs · code"]
+    EXTRACT --> CHUNK["Chunk<br/>1200 chars · max 8 per file"]
+    CHUNK --> EMBED["EmbeddingGemma 300M<br/>4-bit ONNX on CPU"]
+    EMBED --> VECTORS[("Local index<br/>meta.json + vectors.f32")]
+    CHANGED -->|"no: reuse"| VECTORS
+  end
+
+  subgraph SEARCH["② Search · Ctrl+Shift+Space launcher or saan CLI"]
+    QUERY(["Query"]) --> ROUTER{"Router<br/>grep: · glob: · find: · /regex/<br/>or query shape"}
+    ROUTER -->|"what it's about"| SEM["Semantic<br/>embed query · cosine top-k"]
+    ROUTER -->|"text inside"| GREP["Grep<br/>regex over file contents"]
+    ROUTER -->|"name or path"| GLOB["Glob<br/>pattern over paths"]
+    GREP -.->|"no hits"| SEM
+    GLOB -.->|"no hits"| SEM
+    SEM --> HITS["Results<br/>path · size · date · type<br/>same-name files told apart"]
+    GREP --> HITS
+    GLOB --> HITS
+    HITS --> OPEN(["Enter open · Ctrl+Enter reveal"])
+  end
+
+  VECTORS -.->|"vectors"| SEM
+  WALK -.->|"live file list"| GREP
+  WALK -.->|"live file list"| GLOB
+  ROUTER -.->|"unsure? opt-in"| JEV(["Jev router<br/>off by default"])
+  JEV -.->|"chosen mode"| ROUTER
+```
+
+Everything except the optional Jev router runs on your machine. Without a prefix, the router picks a mode
+from the query's shape; an auto-routed grep or glob that finds nothing falls
+back to semantic search. Grep and glob walk the disk live, so they also cover
+files that are never embedded. Only the semantic path loads the model, and it
+unloads again after `SAAN_IDLE_UNLOAD_SECS` of inactivity. Jev is used only if
+you opt in; see [Jev Smart Routing](#jev-smart-routing-optional).
+
+### Repository layout
 
 ```text
 saan/
