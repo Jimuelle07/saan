@@ -263,6 +263,12 @@ the app drop the model again when no semantic query has run for that long.
 | 2026-10-07 | `saan eval` after fixes | 46/46 = 100% |
 | 2026-10-07 | `saan bench`, machine under load (CPU at ~70% of rated performance, 25–50% busy with other apps) | p95 217–290 ms with **both** the old and new embedder binaries, alternated A/B. Requesting only `sentence_embedding` is latency-neutral. Disabling ORT spin-waiting was also neutral and was reverted. The unloaded result above (p95 84.6 ms) stands as the reference |
 | 2026-10-07 | Launcher smoke after the `spawn_blocking` change | hotkey showed the window; a semantic query ranked `papers/urban-heat-islands.pdf` first (44 ms in-app); the setup form stays hidden once indexed |
+| 2026-10-07 | Lighter build: `cargo build --release`, `cargo test --workspace` (4 unit + 6 engine + 12 grep/glob + 1 Jev), `npm run tauri build` | all exit 0 |
+| 2026-10-07 | `saan eval` / `saan bench` (CPU 3% busy) | 46/46 = 100%; p50 53.4 ms, p95 72.7 ms |
+| 2026-10-07 | `scripts/install.ps1` | `saan` resolves to `%LOCALAPPDATA%\saan\bin\saan.exe` in cmd, PowerShell and Git Bash using a PATH rebuilt from the registry; the user `Path` stays REG_EXPAND_SZ |
+| 2026-10-07 | `saan` typed in a fresh cmd window | cold start: launcher visible and in the foreground after ~1 s; second `saan`: the same single process focuses its window |
+| 2026-10-07 | Footprint (installed release) | model loaded: app 183 MB private, whole tree 325 MB. Hidden with `SAAN_IDLE_UNLOAD_SECS=40`: app 25 MB, tree 167 MB. Hidden idle CPU ≈ 110 ms per 30 s across all processes (was ~1% of a core with 3 s status polling). DirectML resolves from `C:\WINDOWS\SYSTEM32` |
+| 2026-10-07 | UI smoke: `todo.txt` | both hits show a "same name" badge, the differing folder (`notes` / `work`) in bold, and `Text · 918 B · 8 h ago` / `Text · 849 B · 8 h ago` |
 
 The Tauri debug build (R2) can be run either as `npm run tauri build -- --debug`
 (the `tauri` npm script, using the `@tauri-apps/cli` devDependency) or as
