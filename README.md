@@ -1,23 +1,60 @@
 <div align="center">
 
-# saan — Private, Local AI File Search for Windows
+# saan
 
-**Find any file by describing it.** saan is a privacy-first desktop file launcher
-with on-device semantic search, regex grep and glob matching in one search box.
+### Private, local AI file search for Windows
 
-[![Rust](https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
-[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-CPU-005CED?style=flat-square&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
-[![EmbeddingGemma](https://img.shields.io/badge/EmbeddingGemma-300M-4285F4?style=flat-square&logo=google&logoColor=white)](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
-[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Tokenizers-FFD21E?style=flat-square&logo=huggingface&logoColor=black)](https://github.com/huggingface/tokenizers)
+*saan* is Filipino for **"where?"** — the question you ask when you're looking for a file.
 
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](#installation-windows)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-D22128?style=flat-square&logo=apache&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.1.0-2EA44F?style=flat-square)](Cargo.toml)
-[![Privacy: Local-first](https://img.shields.io/badge/Privacy-Local--first-6E40C9?style=flat-square)](#privacy)
-[![Author: Jimuelle Patron](https://img.shields.io/badge/Author-Jimuelle_Patron-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Jimuelle07)
+saan is a **privacy-first, local file launcher** by **Jimuelle Patron**. Instead of
+slowly guessing exact strings in a file explorer, you describe what you want and
+it finds the file, using one of three search modes:
+**semantic**, **grep** and **glob**.
+
+<br>
+
+**Core**
+
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Cargo](https://img.shields.io/badge/Cargo-E43717?style=for-the-badge&logo=rust&logoColor=white)](https://doc.rust-lang.org/cargo/)
+[![Tauri](https://img.shields.io/badge/Tauri_2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
+[![clap](https://img.shields.io/badge/clap_CLI-5C3EE8?style=for-the-badge&logo=gnubash&logoColor=white)](https://crates.io/crates/clap)
+
+**Frontend**
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite_6-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/docs/Web/HTML)
+[![CSS](https://img.shields.io/badge/CSS-663399?style=for-the-badge&logo=css&logoColor=white)](https://developer.mozilla.org/docs/Web/CSS)
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![npm](https://img.shields.io/badge/npm-CB3837?style=for-the-badge&logo=npm&logoColor=white)](https://www.npmjs.com/)
+
+**AI & Search**
+
+[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
+[![EmbeddingGemma](https://img.shields.io/badge/EmbeddingGemma_300M-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
+[![Hugging Face](https://img.shields.io/badge/HF_Tokenizers-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://github.com/huggingface/tokenizers)
+[![Regex](https://img.shields.io/badge/regex_%C2%B7_globset_%C2%B7_ignore-6E4A7E?style=for-the-badge&logo=rust&logoColor=white)](https://crates.io/crates/ignore)
+[![PDF](https://img.shields.io/badge/pdf--extract-EC1C24?style=for-the-badge&logo=files&logoColor=white)](https://crates.io/crates/pdf-extract)
+[![Jev](https://img.shields.io/badge/Jev_%28optional%29-111111?style=for-the-badge)](https://docs.typesafe.ai/api)
+
+**Platform & Tooling**
+
+[![Windows](https://img.shields.io/badge/Windows_10%2F11-0078D4?style=for-the-badge)](#installation-windows)
+[![PowerShell](https://img.shields.io/badge/PowerShell_5.1+-5391FE?style=for-the-badge)](scripts/install.ps1)
+[![WebView2](https://img.shields.io/badge/WebView2-0078D7?style=for-the-badge)](https://developer.microsoft.com/microsoft-edge/webview2/)
+[![Credential Manager](https://img.shields.io/badge/Keyring-Credential_Manager-2B2B2B?style=for-the-badge&logo=keepassxc&logoColor=white)](https://crates.io/crates/keyring)
+[![rustls](https://img.shields.io/badge/ureq_+_rustls-1D1D1D?style=for-the-badge&logo=letsencrypt&logoColor=white)](https://crates.io/crates/ureq)
+
+**Project**
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-D22128?style=for-the-badge&logo=apache&logoColor=white)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-0.1.0-2EA44F?style=for-the-badge)](Cargo.toml)
+[![Privacy](https://img.shields.io/badge/Privacy-Local--first-6E40C9?style=for-the-badge&logo=shieldsdotio&logoColor=white)](#privacy)
+[![Stars](https://img.shields.io/github/stars/Jimuelle07/saan?style=for-the-badge&logo=github&color=181717)](https://github.com/Jimuelle07/saan/stargazers)
+[![Author](https://img.shields.io/badge/Author-Jimuelle_Patron-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Jimuelle07)
+
+<br>
 
 [Features](#features) ·
 [Installation](#installation-windows) ·
@@ -56,12 +93,7 @@ with on-device semantic search, regex grep and glob matching in one search box.
 
 ## Overview
 
-*saan* is Filipino for **"where?"** — the question you ask when you're looking
-for a file.
-
-saan is an **open-source, local file search launcher** created by
-**Jimuelle Patron**. Instead of guessing exact file names in File Explorer, you
-type what you remember and saan finds the file using one of three search modes:
+Pick the search mode that matches what you remember:
 
 | Mode | Use when | Example query |
 |---|---|---|
