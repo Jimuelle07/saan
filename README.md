@@ -14,8 +14,6 @@ saan is a privacy-first, local file launcher. Instead of slowly guessing exact s
 
 <br>
 
-Built by [Jimuelle Patron](https://github.com/Jimuelle07)
-
 [![Rust: 2021 edition](https://img.shields.io/badge/Rust-2021%20edition-CE422B?style=flat&labelColor=000000&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri: 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat&labelColor=1B1B1D&logo=tauri&logoColor=white)](https://tauri.app/)
 [![TypeScript: 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&labelColor=1E5A9E&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -23,6 +21,8 @@ Built by [Jimuelle Patron](https://github.com/Jimuelle07)
 [![Inference: ONNX Runtime (CPU)](https://img.shields.io/badge/Inference-ONNX%20Runtime%20%28CPU%29-005CED?style=flat&labelColor=00337F&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
 [![Platform: Windows 10 | 11](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-5B8FD9?style=flat&labelColor=1A3A6B)](#installation-windows)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-D22128?style=flat&labelColor=8A1A1A&logo=apache&logoColor=white)](LICENSE)
+
+Built by [Jimuelle Patron](https://github.com/Jimuelle07)
 
 <br>
 
