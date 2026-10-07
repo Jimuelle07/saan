@@ -59,6 +59,15 @@ different index (default `$SAAN_INDEX_DIR` or `./.saan/index`).
 ```sh
 npm install
 
+# Primary: Tauri CLI from devDependencies, run via npm scripts.
+npm run tauri dev
+npm run tauri build -- --debug
+```
+
+Alternative — the `.tools`-installed `cargo tauri` (note: `cargo tauri` needs
+`.tools/bin` on `PATH`):
+
+```sh
 # tauri CLI installed project-locally into .tools (no global install needed)
 cargo install tauri-cli --version ^2 --root .tools --locked
 
@@ -75,7 +84,7 @@ run, enter a folder to index (or set `SAAN_ROOT` to index one at startup).
 
 | Syntax | Mode | What it does |
 |---|---|---|
-| `grep: <text>` | Grep | Literal text search inside files. |
+| `grep: <text>` | Grep | Regex search inside files (smart case). |
 | `glob: <pattern>` | Glob | File-name / path pattern search. |
 | `find: <text>` | Semantic | Force meaning-based search. |
 | `/regex/` | Grep | Regex search inside files (leading and trailing `/`). |
@@ -118,3 +127,10 @@ See `docs/system-design` for the full architecture and the verification log.
 ## License
 
 Apache-2.0. See [`LICENSE`](LICENSE).
+
+**Model license:** the app code is Apache-2.0, but the EmbeddingGemma weights
+downloaded by `saan fetch-model` (from
+[`onnx-community/embeddinggemma-300m-ONNX`](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX),
+derived from `google/embeddinggemma-300m`) are governed by Google's
+[Gemma Terms of Use](https://ai.google.dev/gemma/terms) and are **not** covered
+by this repository's license; they are not redistributed in the repo.

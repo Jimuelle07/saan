@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use anyhow::{anyhow, Context, Result};
 use ndarray::Array2;
-use ort::session::{builder::GraphOptimizationLevel, Session};
+use ort::session::{builder::GraphOptimizationLevel, OutputSelector, RunOptions, Session};
 use ort::value::TensorRef;
 use tokenizers::Tokenizer;
 
@@ -109,10 +109,20 @@ impl Embedder {
             }
         }
         let mut session = self.session.lock().expect("embedder session poisoned");
-        let outputs = session.run(ort::inputs![
-            "input_ids" => TensorRef::from_array_view(&ids)?,
-            "attention_mask" => TensorRef::from_array_view(&mask)?,
-        ])?;
+        // Ask ONNX Runtime for only `sentence_embedding` so the large
+        // `last_hidden_state` tensor is never materialised. Built per call:
+        // rc.13 only marks `RunOptions<NoSelectedOutputs>` as `Sync`, so a
+        // `RunOptions<HasSelectedOutputs>` field would make `Embedder` !Sync
+        // (it is shared via `Arc<RwLock<Option<Engine>>>` in the Tauri app).
+        let run_options =
+            RunOptions::new()?.with_outputs(OutputSelector::no_default().with("sentence_embedding"));
+        let outputs = session.run_with_options(
+            ort::inputs![
+                "input_ids" => TensorRef::from_array_view(&ids)?,
+                "attention_mask" => TensorRef::from_array_view(&mask)?,
+            ],
+            &run_options,
+        )?;
         let emb = outputs["sentence_embedding"].try_extract_array::<f32>()?;
         let emb = emb.into_dimensionality::<ndarray::Ix2>()?;
         Ok(emb.outer_iter().map(|row| normalize(row.to_vec())).collect())

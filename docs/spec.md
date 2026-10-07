@@ -37,17 +37,20 @@ suite consists of the unit tests in `crates/core/src/chunk.rs` and
 
 **Statement.** The TypeScript frontend MUST typecheck and bundle via
 `npm run build` (script `tsc --noEmit && vite build` in `package.json`), and the
-Tauri app MUST build in debug mode via `cargo tauri build --debug` with the
-project-local Tauri CLI (`.tools/bin`) on `PATH`. Both MUST exit 0.
+Tauri app MUST build in debug mode via `npm run tauri build -- --debug` (the
+`tauri` script, using the `@tauri-apps/cli` devDependency) or via
+`cargo tauri build --debug` with the project-local Tauri CLI (`.tools/bin`) on
+`PATH`. Both MUST exit 0.
 
-**Acceptance check.** `npm run build` exits 0. With `.tools/bin` on `PATH`
+**Acceptance check.** `npm run build` exits 0. `npm run tauri build -- --debug`
+exits 0. Alternatively, with `.tools/bin` on `PATH`
 (`export PATH="$PWD/.tools/bin:$PATH"`, Windows
 `set PATH=%CD%\.tools\bin;%PATH%`), `cargo tauri build --debug` exits 0. The
-Tauri CLI is installed project-locally with
+`cargo tauri` form uses the Tauri CLI installed project-locally with
 `cargo install tauri-cli --version ^2 --root .tools --locked`.
 
 **Verifying artifact.** `npm run build` (the `build` script in `package.json`);
-`cargo tauri build --debug`.
+`npm run tauri build -- --debug` (or `cargo tauri build --debug`).
 
 ### R3 — The corpus indexes
 
@@ -230,7 +233,7 @@ and the `.gitignore` rules for `/models/`, `/.saan/`, `/.tools/`,
 | # | Requirement | Artifact |
 |---|---|---|
 | R1 | Workspace builds; tests pass | `cargo build --release`, `cargo test --workspace` |
-| R2 | Frontend + Tauri build | `npm run build`, `cargo tauri build --debug` |
+| R2 | Frontend + Tauri build | `npm run build`, `npm run tauri build -- --debug` (or `cargo tauri build --debug`) |
 | R3 | Corpus indexes (≥50 files, ≥3 same-name pairs) | `saan index fixtures/corpus` |
 | R4 | Top-5 hit rate ≥ 80% | `saan eval fixtures/eval.json` |
 | R5 | Warm p95 < 100 ms | `saan bench fixtures/eval.json` |

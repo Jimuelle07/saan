@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use saan_core::embed::{find_model_dir, Embedder, MODEL_DIR_NAME};
 use saan_core::jev::JevClient;
@@ -16,9 +16,9 @@ const HOTKEY_LABEL: &str = "Ctrl+Shift+Space";
 
 #[derive(Default)]
 struct AppState {
-    engine: RwLock<Option<Engine>>,
+    engine: Arc<RwLock<Option<Engine>>>,
     /// Last load/index error, shown in the launcher footer.
-    error: RwLock<Option<String>>,
+    error: Arc<RwLock<Option<String>>>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -104,9 +104,16 @@ fn startup(app: &AppHandle) {
 
 #[tauri::command]
 async fn search(state: State<'_, AppState>, query: String, k: Option<usize>) -> Result<SearchResponse, String> {
-    let engine = state.engine.read().expect("engine lock");
-    let engine = engine.as_ref().ok_or("No index yet: choose a folder to index.")?;
-    engine.search(&query, k.unwrap_or(12)).map_err(|e| format!("{e:#}"))
+    // Clone the `'static` Arc out of the borrowed command state so the blocking
+    // task owns everything it touches; no lock guard crosses an await point.
+    let engine = state.engine.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let engine = engine.read().expect("engine lock");
+        let engine = engine.as_ref().ok_or("No index yet: choose a folder to index.")?;
+        engine.search(&query, k.unwrap_or(12)).map_err(|e| format!("{e:#}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -116,7 +123,12 @@ async fn index_folder(app: AppHandle, root: String) -> Result<usize, String> {
         return Err(format!("{} is not a folder", root.display()));
     }
     save_config(&app, &Config { root: Some(root.clone()) })?;
-    build_engine(&app, &root)
+    // `build_engine` walks the tree, embeds and saves the index: keep all of that
+    // off the async runtime. It swaps the engine only after the build finishes,
+    // so in-flight searches keep using the previous index.
+    tauri::async_runtime::spawn_blocking(move || build_engine(&app, &root))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

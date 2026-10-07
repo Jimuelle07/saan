@@ -157,6 +157,11 @@ Reuse is thus keyed on **size + mtime**, not content hashing.
   `onnx/model_q4.onnx_data`, constant `MODEL_FILE`), tokenizer and config from the public repo
   `onnx-community/embeddinggemma-300m-ONNX`, stored under
   `models/embeddinggemma-300m` (name `MODEL_DIR_NAME`).
+- **Model license:** the app code is Apache-2.0, but these weights (from
+  `onnx-community/embeddinggemma-300m-ONNX`, derived from
+  `google/embeddinggemma-300m`, fetched by `saan fetch-model`) are governed by
+  Google's [Gemma Terms of Use](https://ai.google.dev/gemma/terms), are not
+  covered by this repo's license, and are not redistributed in the repo.
 - Location resolved by `find_model_dir`: `$SAAN_MODEL_DIR`, else `models/<name>`
   under the current dir or any ancestor of the current dir / executable,
   requiring `tokenizer.json`.
@@ -215,3 +220,12 @@ The route request body contains only the query at every level.
 | 2026-10-07 | `saan bench fixtures/eval.json` (release, i5-13420H CPU) | p50 61.2 ms, p95 84.6 ms (limit 100 ms). The int8 `model_quantized.onnx` gave p95 ~200 ms, so the default switched to `model_q4.onnx` |
 | 2026-10-07 | Launcher smoke | Ctrl+Shift+Space showed the window; `todo.txt` → both files with "same name" badges (23 ms); a semantic query ranked `notes/todo.txt` first; Enter opened it in Notepad and hid the launcher |
 | 2026-10-07 | History scan | no model weights, `.saan/`, `.env`, Jev keys, or Co-authored-by trailers |
+| 2026-10-07 | Advisor fixes: `cargo build --release`, `cargo test --workspace` (22 pass), `npm run tauri build -- --debug` | all exit 0 |
+| 2026-10-07 | `saan eval` after fixes | 46/46 = 100% |
+| 2026-10-07 | `saan bench`, machine under load (CPU at ~70% of rated performance, 25–50% busy with other apps) | p95 217–290 ms with **both** the old and new embedder binaries, alternated A/B. Requesting only `sentence_embedding` is latency-neutral. Disabling ORT spin-waiting was also neutral and was reverted. The unloaded result above (p95 84.6 ms) stands as the reference |
+| 2026-10-07 | Launcher smoke after the `spawn_blocking` change | hotkey showed the window; a semantic query ranked `papers/urban-heat-islands.pdf` first (44 ms in-app); the setup form stays hidden once indexed |
+
+The Tauri debug build (R2) can be run either as `npm run tauri build -- --debug`
+(the `tauri` npm script, using the `@tauri-apps/cli` devDependency) or as
+`cargo tauri build --debug` with the project-local CLI (`.tools/bin`) on
+`PATH`; the log above records the `cargo tauri` form.
