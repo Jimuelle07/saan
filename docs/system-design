@@ -8,26 +8,27 @@ claim below is grounded in the code; file paths are relative to the repo root.
 
 | Component | Location | Responsibility |
 |---|---|---|
-| `saan-core` library | `crates/core/src` | Chunking, embedding, extraction, index, router, grep, glob, Jev client, engine. |
+| `saan-core` library | `crates/core/src` | Chunking, embedding, extraction, scope (multi-root walk with size cap), index, router, grep, glob, Jev client, engine. |
 | `saan` CLI | `crates/cli/src/main.rs` | `fetch-model`, `index`, `search`, `grep`, `glob`, `eval`, `bench`; with **no subcommand** it launches the desktop app and exits. |
-| Tauri app | `src-tauri/src/main.rs` | Desktop window + global hotkey, Tauri commands, engine state, Jev wiring. |
-| Frontend | `index.html`, `src/main.ts` | Plain TypeScript launcher UI (debounced search, keyboard nav, folder setup, result metadata). |
+| Tauri app | `src-tauri/src/main.rs` | Desktop window + global hotkey, settings commands and persistence, background multi-folder indexing with progress/cancel, engine state, Jev wiring. |
+| Frontend | `index.html`, `src/main.ts`, `src/style.css` | Plain TypeScript launcher UI (debounced search, keyboard nav, settings view with themes and folders, index progress, result metadata). |
 | Installer | `scripts/install.ps1` | Builds the app with `npm run tauri build` (embeds the frontend) and the CLI with cargo. Stops any running launcher, copies both executables to `%LOCALAPPDATA%\saan\bin`, and copies or fetches the model to `%LOCALAPPDATA%\saan\models`. Puts `bin` on the user `PATH` through the raw registry value, so `%VAR%` entries and REG_EXPAND_SZ survive. `-Uninstall [-Purge]` reverses it. |
 
 ### Core modules (`crates/core/src`)
 
 | Module | Key items | Notes |
 |---|---|---|
-| `lib.rs` | `Engine`, `Hit`, `SearchResponse`, `Index`, `Mode`, `Route`, `rel_path` | Re-exports plus `rel_path` (forward slashes, relative to the index root when possible). |
+| `lib.rs` | `Engine`, `Hit`, `SearchResponse`, `Index`, `Scope`, `Mode`, `Route`, `rel_path` | Re-exports plus `rel_path` (forward slashes, relative to the index root when possible). |
 | `chunk.rs` | `CHUNK_CHARS = 1200`, `OVERLAP_CHARS = 200`, `chunk_ranges` | Byte ranges into extracted text; snaps to a line break in the back half of the window and always to char boundaries. |
-| `embed.rs` | `Embedder`, `Embedder::load_with_threads`, `find_model_dir`, `doc_prompt`, `MODEL_DIR_NAME`, `MODEL_REPO`, `MODEL_FILES` | EmbeddingGemma-300m via ONNX Runtime, on-device. |
-| `extract.rs` | `walk_files`, `extract_text`, `looks_binary`, `MAX_INDEX_BYTES = 2 MiB` | Walks with the `ignore` crate (respects `.gitignore`/`.ignore` and hidden-file rules) and additionally skips directories named `node_modules`, `target`, `__pycache__`, `.venv`, `venv`; skips files > 2 MiB for embedding; PDFs via `pdf-extract`; binary when the first 8 KiB contain a NUL byte. |
-| `index.rs` | `Index`, `FileEntry`, `ChunkEntry`, `FileScore`, `BuildStats` | On-disk `meta.json` + `vectors.f32`; brute-force cosine search; incremental reuse. |
+| `embed.rs` | `Embedder`, `EmbedOptions { threads }`, `Embedder::load_with`, `find_model_dir`, `doc_prompt`, `MODEL_DIR_NAME`, `MODEL_REPO`, `MODEL_FILES` | EmbeddingGemma-300m via ONNX Runtime, on-device, on the **CPU** execution provider only (spec R15: the DirectML path measured ~13× slower). |
+| `extract.rs` | `SKIP_DIRS`, `is_content_file`, `extract_text`, `looks_binary` | Directory-name skip list (`node_modules`, `target`, `__pycache__`, `.venv`, `venv`, `.git`, `$Recycle.Bin`, `System Volume Information`, `Windows`, `Program Files`, `Program Files (x86)`, `ProgramData`, `AppData`), PDF/text extraction and the content-file allow-list (only content files are embedded; everything glob/grep-able is still searchable). The old `walk_files` is gone — walking lives in `Scope::files`. |
+| `scope.rs` | `Scope { roots, max_file_bytes }`, `ScopedFile`, `Scope::single`, `Scope::new`, `display_rel`, `files`, `DEFAULT_MAX_FILE_BYTES = 10 MiB` | The one walk used by indexing, grep and glob: every visible file under every root, sorted by (root, rel), applying `.gitignore`/`.ignore`, hidden-file rules, `SKIP_DIRS` (case-insensitive) and the file-size cap — files over `max_file_bytes` never appear in semantic, grep or glob results. `display_rel` prefixes `<root label>/` when several roots are indexed. |
+| `index.rs` | `Index`, `FileEntry { root, rel, size, mtime }`, `ChunkEntry`, `FileScore`, `BuildEvent`, `BuildOptions { checkpoint_every }`, `BuildStats` (incl. `cancelled`), `FORMAT_VERSION = 2`, `MAX_CHUNKS_PER_FILE = 64` | On-disk `meta.json` + `vectors.f32`; brute-force cosine search; incremental reuse keyed on absolute path + size + mtime; long files embed only their first 64 chunks. |
 | `router.rs` | `Mode`, `Route`, `RouteSource`, `local_route`, `CONFIDENT = 0.75` | Deterministic local query router. |
-| `grep.rs` | `grep`, `GrepHit`, `MAX_LINE_CHARS = 200` | Line-oriented regex search, smart case, ripgrep-style. |
-| `glob.rs` | `glob` | Path pattern matching over the walked file list. |
-| `jev.rs` | `JevClient`, `Privacy`, `Candidate`, `SNIPPET_CHARS = 160` | Optional TypeSafe AI System One decision layer. |
-| `engine.rs` | `Engine::new`, `preload`, `release_if_idle`, `model_loaded`, `search`, `semantic`, `grep`, `glob`, `mark_same_names` | Ties routing, the three search modes and Jev together. `new` takes an `Index`, a model **directory** and an optional `JevClient` and does **not** load the model: the `Embedder` is loaded lazily on the first semantic use (or `preload`) into a `Mutex<Option<Arc<Embedder>>>`, and `release_if_idle` drops it after an idle timeout. |
+| `grep.rs` | `grep(scope, pattern, limit)`, `GrepHit { rel, path, line, text }`, `MAX_LINE_CHARS = 200` | Line-oriented regex search over `Scope::files()`, smart case, ripgrep-style. |
+| `glob.rs` | `glob(scope, pattern, limit)`, `GlobHit { rel, path, size, mtime }` | Path pattern matching over `Scope::files()`; a bare pattern matches the file name, a `/`-containing pattern matches the per-root or display rel. |
+| `jev.rs` | `JevClient`, `JevClient::new(key, privacy)`, `Privacy::as_str`, `Candidate`, `SNIPPET_CHARS = 160` | Optional TypeSafe AI System One decision layer; the key is supplied by the app (env or OS credential store). |
+| `engine.rs` | `Engine::new`, `set_jev`, `set_embed_options`, `preload`, `release_if_idle`, `model_loaded`, `search`, `semantic`, `grep`, `glob`, `mark_same_names` | Ties routing, the three search modes and Jev together. `new` takes an `Index`, a model **directory** and an optional `JevClient` and does **not** load the model: the `Embedder` is loaded lazily on the first semantic use (or `preload`) into a `Mutex<Option<Arc<Embedder>>>`, and `release_if_idle` drops it after an idle timeout. `set_embed_options` stores `EmbedOptions` and unloads the embedder when they change (next use reloads via `Embedder::load_with`); a 256-entry query-embedding cache sits in front of it and is cleared on unload. Grep/glob search the scope of the loaded index (`index.scope()`). |
 
 ### CLI commands (`crates/cli/src/main.rs`)
 
@@ -37,10 +38,10 @@ Global option: `--index <dir>` (default `$SAAN_INDEX_DIR` or `./.saan/index`).
 |---|---|---|
 | *(none)* | — | Launches the desktop app and exits 0. Calls `AllowSetForegroundWindow(ASFW_ANY)` so the launcher (or the running instance) can take focus from the terminal. Then spawns `saan-app[.exe]` found next to the running `saan.exe` (or `$SAAN_APP`) with `SAAN_SHOW=1`, detached on Windows (`DETACHED_PROCESS` + `CREATE_NEW_PROCESS_GROUP`) and with null stdio. Exits 1 with a clear message when the app binary is missing. |
 | `fetch-model` | — | Downloads the files in `MODEL_FILES` from `MODEL_REPO` into `$SAAN_MODEL_DIR` or `./models/<MODEL_DIR_NAME>`, skipping files already present (`.part` temp file then rename). |
-| `index <root>` | — | Builds the index, reusing unchanged files when a previous index loads. |
+| `index <root>...` | `--max-file-mb <n>` (default 10) | Builds the index for one or more roots (`Scope::new(roots, n·1024·1024)`), reusing unchanged files when a previous index loads. Progress goes to stderr as `[done/total] eta 1m23s  rel` (at most one line per 250 ms); the stdout summary line is unchanged. |
 | `search <query...>` | `-k <n>` (default 10), `--json` | Routed search; words are joined with spaces. Builds `Engine::new(index, model_dir, JevClient::from_env())`; the model loads on the first semantic use (grep/glob routes never load it). |
-| `grep <pattern>` | `--root <dir>` (default `.`) | Direct regex search (no routing), prints `rel:line: text`. |
-| `glob <pattern>` | `--root <dir>` (default `.`) | Direct glob search (no routing). |
+| `grep <pattern>` | `--root <dir>` (repeatable, default `.`), `--max-file-mb <n>` (default 10) | Direct regex search (no routing) over a `Scope` of the roots, prints `rel:line: text` (`GrepHit.rel` is the display rel). |
+| `glob <pattern>` | `--root <dir>` (repeatable, default `.`), `--max-file-mb <n>` (default 10) | Direct glob search (no routing) over the same kind of `Scope`, prints `GlobHit.rel` per match. |
 | `eval <file>` | `-k <n>` (default 5), `--min <rate>` (default 0.8) | Top-k hit rate over `{query, expected}` cases; exits failure below `--min`. Uses a **local-only** engine (`Engine::new(index, model_dir, None)`) so results are reproducible. |
 | `bench <file>` | `--runs <n>` (default 5), `--max-ms <ms>` (default 100) | Warm p50/p95/max latency over the eval queries; exits failure if p95 ≥ `--max-ms`. Also local-only, and calls `Engine::preload()` before the warm-up loop so model load time is excluded from the measurement. |
 
@@ -51,13 +52,51 @@ other commands when it is missing.
 
 ### Tauri commands (`src-tauri/src/main.rs`)
 
+Commands take JSON arguments in camelCase (Tauri's default). The old
+`index_folder` command is removed.
+
 | Command | Signature | Behaviour |
 |---|---|---|
 | `search` | `(query: String, k: Option<usize>)` | `Engine::search`; `k` defaults to 12. Errors if no index is loaded. |
-| `index_folder` | `(root: String)` | Validates the folder, saves it to `config.json`, rebuilds and swaps in the engine. |
-| `status` | — | `{ready, root, files, jev, hotkey, error}`; `hotkey` is the constant `Ctrl+Shift+Space`. |
+| `get_settings` | — | Returns `SettingsView` = the persisted `Settings` plus `jev_key_saved: bool`, `jev_env_override: bool` and `suggested_roots: string[]` (existing Documents/Desktop/Downloads). |
+| `save_settings` | `(settings: Settings)` | Persists and applies immediately: Jev via `engine.set_jev`; roots and max file size apply on the next indexing run. Returns `SettingsView`. |
+| `set_jev_key` | `(key: Option<String>)` | Stores the trimmed non-empty key in the OS credential store, or deletes it when `null`, then re-applies Jev. Returns `SettingsView`. Never written to `config.json` or logs. |
+| `pick_folder` | — | `tauri-plugin-dialog` folder picker; returns `Option<String>` (window hide-on-blur is suppressed while it is open). |
+| `start_index` | — | Background indexing of `settings.roots` at `settings.max_file_mb`; errors if a run is active or there are no roots. |
+| `cancel_index` | — | Requests cancellation; the build stops at the next file and keeps the partial index (`BuildStats.cancelled = true`). |
+| `status` | — | `{ready, roots, files, jev, hotkey, error, model_loaded, theme, indexing}` (the `root` field is replaced by `roots`); `hotkey` is the constant `Ctrl+Shift+Space`. |
 | `open_path` | `(path: String, reveal: bool)` | Opens with the default app, or reveals in the file manager, then hides the window. |
 | `hide_window` | — | Hides the `main` webview window. |
+
+**Index progress event.** `start_index` emits the event `"index-progress"` at
+most 4×/s with payload `{ state: "running"|"done"|"cancelled"|"error", done,
+total, current, filesIndexed, filesReused, elapsedMs, message }`. Every 200
+embedded files the partial index is saved and swapped into the engine, so
+search works during a long run; a later run reuses those files and resumes.
+
+### Settings (`config.json` in the app data dir)
+
+`Settings` is serde with every field `#[serde(default)]` (unknown keys such as a
+legacy `gpu` from an older `config.json` are ignored); the legacy
+`{"root": "..."}` shape migrates to `roots: [root]`:
+
+```json
+{ "roots": ["C:\\Users\\me\\Documents"], "theme": "blue", "jev_enabled": false, "jev_privacy": "a",
+  "max_file_mb": 10, "index_speed": "background" }
+```
+
+- `theme` ∈ `blue` | `violet` | `green` | `orange` (default `blue`); the theme
+  sets accent **and** text colours.
+- `index_speed` ∈ `background` (2 threads) | `fast` (all cores).
+- `max_file_mb` — the `Scope` size cap for the next indexing run (default 10;
+  larger files are hidden from semantic, grep and glob results everywhere).
+- `jev_enabled`, `jev_privacy` — Jev switch and privacy level (`a`/`b`/`c`).
+
+**Jev key storage.** The key is held in the Windows Credential Manager through
+the `keyring` crate (v3, feature `windows-native`), service `"saan"`, user
+`"jev-api-key"` — never in `config.json` or logs. `JevClient::from_env()` still
+wins when `JEV_API_KEY` + `SAAN_JEV` are set; the CLI reads only the
+environment.
 
 App state is `AppState { engine: RwLock<Option<Engine>>, error: RwLock<Option<String>> }`.
 The app is registered with `tauri-plugin-single-instance` (v2): launching
@@ -66,8 +105,9 @@ The app is registered with `tauri-plugin-single-instance` (v2): launching
 instead of starting a second process.
 
 On startup the app registers the global shortcut `Ctrl+Shift+Space`; pressing it
-toggles the window. If `SAAN_ROOT` is set it (re)indexes that folder first,
-otherwise it loads the saved index. The engine is constructed **without** loading
+toggles the window. If `SAAN_ROOT` is set it becomes the single root
+(`roots = [SAAN_ROOT]`) and is (re)indexed first, otherwise the saved index
+loads. The engine is constructed **without** loading
 the model; it loads on the first semantic query, and the app drops it again with
 `Engine::release_if_idle` after `SAAN_IDLE_UNLOAD_SECS` (default 300) seconds
 without a semantic query, so an idle
@@ -75,19 +115,31 @@ launcher gives the ~197 MB back. The window hides on focus loss, and
 `SAAN_SHOW` makes it visible at startup, after the first page load finishes
 (showing earlier let WebView2 start-up hand focus back to the terminal, and the
 window then hid itself on blur). Window config
-(`src-tauri/tauri.conf.json`): label `main`, 720×480, undecorated, always on
+(`src-tauri/tauri.conf.json`): label `main`, 720×560, undecorated, always on
 top, centered, not resizable, skipped from the taskbar, initially hidden.
 
-### Frontend (`index.html`, `src/main.ts`)
+### Frontend (`index.html`, `src/main.ts`, `src/style.css`)
 
 A single `#launcher` view: mode badge, query input, results listbox, folder
 setup form and status footer. It calls the Tauri commands via
 `@tauri-apps/api/core`'s `invoke`. Searches are debounced 40 ms and guarded by a
 sequence number so a stale response cannot overwrite a newer one. `↑`/`↓` move
-the selection, `Enter` opens, `Ctrl+Enter` reveals, `Escape` hides the window.
-Status is refreshed on window focus (and on a timer while visible). Each result
-row also renders the hit's metadata — `size` (bytes), `modified` (Unix seconds)
-and `ext` — so files that share a name are easy to tell apart.
+the selection, `Enter` opens, `Ctrl+Enter` reveals, `Escape` hides the window
+(settings first, if open). Status is refreshed on window focus (and on a timer
+while visible). Each result row also renders the hit's metadata — `size` (bytes),
+`modified` (Unix seconds) and `ext` — so files that share a name are easy to
+tell apart.
+
+**Settings view.** A gear button in the search bar (or `Ctrl+,`) swaps the
+results list for the settings view; `Esc` closes settings before hiding the
+window. Sections: Appearance (four theme swatches), Folders (list with remove,
+"Add folder…" via `pick_folder`, one-click add of `suggested_roots`, max file
+size MB, index speed), Index (Start/Cancel, progress bar, done/total, ETA and
+current file via `listen("index-progress")`), Jev (password field with
+Save/Remove and "key saved" state, enable toggle, privacy A/B/C with one-line
+descriptions and the env-override notice). Themes are `<html data-theme="blue|violet|green|orange">`,
+setting `--bg`, `--panel`, `--line`, `--text`, `--dim` and `--accent` so text
+and accent both follow the theme.
 
 ## Query data flow
 
@@ -104,9 +156,9 @@ and `ext` — so files that share a name are easy to tell apart.
    - `semantic` → `Embedder::embed_query` then `Index::search` (top-k files by
      best-chunk cosine). The embedder is loaded on first use (cloned `Arc`
      outside the lock), so grep/glob searches never touch it.
-   - `grep` → `grep::grep` with `GREP_HIT_LIMIT = 500`, one row per file (first
-     matching line), `score = 1.0`, `line` set.
-   - `glob` → `glob::glob`, `score = 1.0`, empty snippet.
+   - `grep` → `grep::grep` over `index.scope()` with `GREP_HIT_LIMIT = 500`,
+     one row per file (first matching line), `score = 1.0`, `line` set.
+   - `glob` → `glob::glob` over `index.scope()`, `score = 1.0`, empty snippet.
    - Every hit also carries `size` (bytes), `modified` (Unix seconds, 0 when
      unknown) and `ext` (lowercase, no dot): semantic hits read them from
      `Index.files[i].size`/`mtime`, grep/glob hits from `std::fs::metadata`.
@@ -145,32 +197,61 @@ flowchart TD
 
 Two files, written by `Index::save` and read by `Index::load`:
 
-- **`meta.json`** — `{ version: 1, root, dim, files: [{ rel, size, mtime }],
-  chunks: [{ file, preview }] }`. `rel` is root-relative with forward slashes;
-  `size` is bytes and `mtime` is seconds since the Unix epoch; `preview` is the
-  chunk text with whitespace collapsed, capped at `PREVIEW_CHARS = 240`; each
-  chunk refers to its file by index.
+- **`meta.json`** — `{ version: 2, roots: [...], max_file_bytes, dim, files:
+  [{ root, rel, size, mtime }], chunks: [{ file, preview }] }`. `roots` are the
+  scope's absolute root folders and `root` on a file entry is its index into
+  that list; `rel` is root-relative with forward slashes; `size` is bytes and
+  `mtime` is seconds since the Unix epoch; `preview` is the chunk text with
+  whitespace collapsed, capped at `PREVIEW_CHARS = 240`; each chunk refers to
+  its file by index. `FORMAT_VERSION = 2`: a version-1 index fails to load and
+  the caller rebuilds.
 - **`vectors.f32`** — row-major little-endian `f32`, one L2-normalised row of
   `dim` values per chunk.
 
-`load` rejects an unsupported `version` and a vector-count mismatch (`chunks ×
-dim`). Search computes each row's dot product against the normalised query (so
-dot product = cosine), keeps the best chunk per file, sorts descending and
-truncates to `k`.
+Only content files (`is_content_file`: PDF plus a text/doc/code allow-list) are
+stored in the index; every other file remains glob/grep-able because those walk
+the disk through `Scope`. `load` rejects an unsupported `version` and a
+vector-count mismatch (`chunks × dim`). Search computes each row's dot product
+against the normalised query (so dot product = cosine), keeps the best chunk
+per file, sorts descending and truncates to `k`.
+
+### Scope (`crates/core/src/scope.rs`)
+
+Indexing, grep and glob share one walk:
+
+- `Scope::single(root)` (default cap `DEFAULT_MAX_FILE_BYTES = 10 MiB`) or
+  `Scope::new(roots, max_file_bytes)`; the CLI takes `--max-file-mb`, the app
+  `settings.max_file_mb`.
+- `Scope::files()` lists every visible file under every root, sorted by
+  `(root, rel)`, applying `.gitignore`/`.ignore`, hidden-file rules, `SKIP_DIRS`
+  (matched on the directory name, case-insensitively) and the size cap: files
+  larger than `max_file_bytes` never appear in semantic, grep or glob results.
+- `ScopedFile { root, path, rel, size, mtime }`; `Scope::display_rel` renders
+  `rel` unchanged for a single root and `<label>/<rel>` for several, the label
+  being the root's last path component (or the drive, e.g. `C:`, for a drive
+  root). `GrepHit.rel` and `GlobHit.rel` are display rels.
 
 ### Incremental reuse
 
-`Index::build(root, embedder, previous, progress)`:
+`Index::build(&scope, embedder, previous, &BuildOptions { checkpoint_every },
+on_event)`:
 
-- The previous index is used only when `previous.root == root.canonicalize()`
-  and `previous.dim == embedder.dim()`.
-- A file whose `rel` matches and whose `size` **and** `mtime` are unchanged is
-  copied from the previous index (chunks and vectors) without re-embedding and
-  counted in `files_reused`. Changed or new files are re-extracted and embedded.
-- Embedding is batched `EMBED_BATCH = 8` chunks at a time.
-- `BuildStats` reports `files_seen`, `files_indexed`, `files_reused`, `chunks`.
+- Walks `scope.files()`; a previous entry is reused when its **absolute path**,
+  `size` and `mtime` all match, so a rerun — or a resumed run after cancel —
+  copies chunks and vectors instead of re-embedding (`files_reused`). Changed
+  or new files are re-extracted; only content files are embedded.
+- `BuildEvent::File { done, total, rel }` reports progress (`total` = files to
+  (re)embed, `rel` = display path); `BuildEvent::Checkpoint(&Index)` fires
+  every `checkpoint_every` embedded files (`0` = never — the app saves
+  explicitly every 200 files instead). Returning `false` from `on_event`
+  cancels: `build` returns the partial index of reused plus already-embedded
+  files with `BuildStats.cancelled = true`.
+- Embedding is batched `EMBED_BATCH = 8` chunks at a time; files longer than
+  `MAX_CHUNKS_PER_FILE = 64` chunks embed only the first 64.
+- `BuildStats` reports `files_seen`, `files_indexed`, `files_reused`,
+  `chunks`, `cancelled`.
 
-Reuse is thus keyed on **size + mtime**, not content hashing.
+Reuse is thus keyed on **absolute path + size + mtime**, not content hashing.
 
 ## Embedding
 
@@ -189,6 +270,13 @@ Reuse is thus keyed on **size + mtime**, not content hashing.
 - Session: ONNX Runtime with `GraphOptimizationLevel::Level3` and
   `intra_threads = $SAAN_THREADS` or `min(available_parallelism, 8)` (4 if unknown). Model
   dimension is probed with `embed_query("probe")`.
+- Execution provider: `EmbedOptions { threads: Option<usize> }` —
+  `Embedder::load_with(dir, opts)` runs on the **CPU** execution provider; no
+  GPU/DirectML registration exists (spec R15 records why: the DirectML path
+  measured p95 836–1072 ms vs 76–80 ms CPU). `Embedder::load(dir)` is
+  `load_with(dir, EmbedOptions::default())`. The engine's `set_embed_options`
+  unloads the current embedder when the options change, so the next query
+  reloads with them.
 - Prompts: documents are `doc_prompt(title, text)` =
   `title: {title} | text: {text}` where the title is `"{rel} ({file name})"`;
   queries are prefixed with `task: search result | query: `.
@@ -199,8 +287,13 @@ Reuse is thus keyed on **size + mtime**, not content hashing.
 
 ## Jev privacy
 
-Jev (TypeSafe AI System One) is opt-in and off unless `SAAN_JEV` is
-`on`/`1`/`true` **and** `JEV_API_KEY` is set. Requests go to
+Jev (TypeSafe AI System One) is opt-in and off by default. The API key comes
+from `JEV_API_KEY` (`JevClient::from_env()`, unchanged — it also needs
+`SAAN_JEV` to be `on`/`1`/`true`, and when set it overrides the app's saved
+settings) **or** from the OS credential store: the settings panel saves it with
+the `keyring` crate (v3, feature `windows-native`), service `"saan"`, user
+`"jev-api-key"`, and hands it to `JevClient::new(key, privacy)` — never from a
+file, and never written to `config.json` or logs. Requests go to
 `POST {base}/v1/systemone` with `Authorization: Bearer <key>`, a 2500 ms global
 timeout, and model `SAAN_JEV_MODEL` (default `jev-latest`).
 
@@ -211,7 +304,9 @@ timeout, and model `SAAN_JEV_MODEL` (default `jev-latest`).
 | `c` | `c` / `snippets` | query text | query + candidate relative paths + snippets capped at `SNIPPET_CHARS = 160` |
 
 Absolute paths, file contents beyond the snippet, and index data are never sent.
-The route request body contains only the query at every level.
+The route request body contains only the query at every level. The settings
+panel offers the same three levels (`jev_privacy`, values `a`/`b`/`c`);
+`SAAN_JEV_PRIVACY` applies when the environment path is active.
 
 ## Distribution and footprint
 
@@ -220,9 +315,9 @@ The route request body contains only the query at every level.
 in `%LOCALAPPDATA%\saan\bin` and the model in
 `%LOCALAPPDATA%\saan\models\embeddinggemma-300m`; because that model folder is a
 `models/` ancestor of `bin`, `find_model_dir` resolves it without any environment
-variable. No `DirectML.dll` is copied next to the executables: saan uses the CPU
-execution provider, and ONNX Runtime resolves any DirectML dependency from
-`C:\Windows\System32` (present since Windows 10 1903).
+variable. saan embeds on the **CPU execution provider only** — on an RTX 4050
+Laptop + i5-13420H the DirectML path measured p95 836–1072 ms vs 76–80 ms CPU
+(uncached `saan bench fixtures/eval.json`), so the GPU option was removed.
 
 The ~197 MB model is not resident by default: `Engine::new` takes a directory and
 loads the `Embedder` lazily on the first semantic query, so an idle launcher is
@@ -235,14 +330,14 @@ the app drop the model again when no semantic query has run for that long.
 |---|---|---|
 | `SAAN_MODEL_DIR` | `embed::find_model_dir`, CLI `fetch-model` | Model folder (also the download destination). |
 | `SAAN_INDEX_DIR` | CLI `index_dir` | Index folder when `--index` is not given. |
-| `SAAN_THREADS` | `Embedder::load` | ONNX Runtime intra-op threads (default `min(cores, 8)`). |
-| `SAAN_ROOT` | Tauri `startup` | Folder to (re)index at launch. |
+| `SAAN_THREADS` | `Embedder::load_with` | ONNX Runtime intra-op threads (default `min(cores, 8)`). |
+| `SAAN_ROOT` | Tauri `startup` | Root folder to (re)index at launch: `roots = [SAAN_ROOT]`. |
 | `SAAN_SHOW` | Tauri `setup` / `on_page_load` | Show the window once the page has loaded (any value). The CLI sets `SAAN_SHOW=1` when it spawns the app. |
 | `SAAN_APP` | CLI (no subcommand) | Path to the desktop app binary; default is `saan-app[.exe]` next to the running `saan` executable. |
 | `SAAN_IDLE_UNLOAD_SECS` | Tauri idle unload | Seconds without a semantic query, with the window hidden, before the app drops the model (default 300; checked every 30 s). |
 | `SAAN_JEV` | `JevClient::from_env` | Enables Jev when `on`, `1` or `true`. |
-| `JEV_API_KEY` | `JevClient::from_env` | Bearer token; required for Jev. Read from nowhere else. |
-| `SAAN_JEV_PRIVACY` | `JevClient::from_env` | `a`/`query` (default), `b`/`paths`, `c`/`snippets`. |
+| `JEV_API_KEY` | `JevClient::from_env` | Bearer token for the environment path (required with `SAAN_JEV`); when set it overrides the key saved in the Windows Credential Manager. The key is never read from a file. |
+| `SAAN_JEV_PRIVACY` | `JevClient::from_env` | `a`/`query` (default), `b`/`paths`, `c`/`snippets`; overrides the settings privacy level when the env path is active. |
 | `SAAN_JEV_URL` | `JevClient::from_env` | API base URL (default `https://api.typesafe.ai`); trailing `/` trimmed. |
 | `SAAN_JEV_MODEL` | `JevClient::from_env` | Model name (default `jev-latest`). |
 
@@ -267,7 +362,7 @@ the app drop the model again when no semantic query has run for that long.
 | 2026-10-07 | `saan eval` / `saan bench` (CPU 3% busy) | 46/46 = 100%; p50 53.4 ms, p95 72.7 ms |
 | 2026-10-07 | `scripts/install.ps1` | `saan` resolves to `%LOCALAPPDATA%\saan\bin\saan.exe` in cmd, PowerShell and Git Bash using a PATH rebuilt from the registry; the user `Path` stays REG_EXPAND_SZ |
 | 2026-10-07 | `saan` typed in a fresh cmd window | cold start: launcher visible and in the foreground after ~1 s; second `saan`: the same single process focuses its window |
-| 2026-10-07 | Footprint (installed release) | model loaded: app 183 MB private, whole tree 325 MB. Hidden with `SAAN_IDLE_UNLOAD_SECS=40`: app 25 MB, tree 167 MB. Hidden idle CPU ≈ 110 ms per 30 s across all processes (was ~1% of a core with 3 s status polling). DirectML resolves from `C:\WINDOWS\SYSTEM32` |
+| 2026-10-07 | Footprint (installed release) | model loaded: app 183 MB private, whole tree 325 MB. Hidden with `SAAN_IDLE_UNLOAD_SECS=40`: app 25 MB, tree 167 MB. Hidden idle CPU ≈ 110 ms per 30 s across all processes (was ~1% of a core with 3 s status polling). |
 | 2026-10-07 | UI smoke: `todo.txt` | both hits show a "same name" badge, the differing folder (`notes` / `work`) in bold, and `Text · 918 B · 8 h ago` / `Text · 849 B · 8 h ago` |
 
 The Tauri debug build (R2) can be run either as `npm run tauri build -- --debug`

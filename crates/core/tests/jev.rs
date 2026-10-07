@@ -261,7 +261,43 @@ fn env_gating_and_privacy_levels() {
     assert!(sent.contains(&long[..jev::SNIPPET_CHARS]), "level c must send the snippet head");
     assert!(!sent.contains(&long), "level c must not send a snippet longer than SNIPPET_CHARS");
 
-    // 6. A dead endpoint is an Err, not a panic or a hang.
+    // 6. JevClient::new: the key comes from the app, never from the environment
+    // (SAAN_JEV and JEV_API_KEY are unset here); the URL still comes from
+    // SAAN_JEV_URL and the model falls back to the default, and the privacy
+    // level is fixed at construction.
+    clear_jev_env();
+    std::env::set_var("SAAN_JEV_URL", &server.url);
+
+    let client = JevClient::new("app-key".into(), Privacy::Paths);
+    assert_eq!(client.privacy(), Privacy::Paths, "privacy() reports the construction-time level");
+    assert_eq!(client.privacy, Privacy::Paths);
+
+    let before = server.count();
+    assert_eq!(client.pick("which readme", &cands).expect("pick"), Some(1), "mock answers c1");
+    assert_eq!(server.count(), before + 1, "exactly one pick request");
+    let picking = server.request(before);
+    assert_eq!(picking.path, "/v1/systemone");
+    assert_eq!(
+        picking.authorization.as_deref(),
+        Some("Bearer app-key"),
+        "the app-supplied key is used verbatim with no env key set"
+    );
+    let picking_body = picking.json();
+    assert_eq!(picking_body["model"], json!(jev::DEFAULT_MODEL), "model falls back to the default");
+    assert_eq!(picking_body["state"], json!({ "query": "which readme" }));
+    assert!(!picking.body.contains("SECRET-SNIPPET"), "level b must not send snippets: {}", picking.body);
+    let criteria = picking_body["questions"]["best"]["criteria"].as_object().expect("criteria object");
+    assert_eq!(criteria.len(), 3, "one criterion per candidate");
+    for (key, value) in criteria {
+        let fields = value.as_object().expect("criteria value is an object");
+        assert_eq!(
+            fields.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["path"],
+            "{key} at level b must carry only `path`"
+        );
+    }
+
+    // 7. A dead endpoint is an Err, not a panic or a hang.
     let dead_port = {
         let probe = TcpListener::bind("127.0.0.1:0").expect("bind probe port");
         let port = probe.local_addr().expect("probe address").port();

@@ -35,6 +35,15 @@ pub enum Privacy {
 }
 
 impl Privacy {
+    /// The wire spelling: `"a"`, `"b"` or `"c"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Privacy::Query => "a",
+            Privacy::Paths => "b",
+            Privacy::Snippets => "c",
+        }
+    }
+
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "a" | "query" => Some(Privacy::Query),
@@ -65,6 +74,22 @@ fn env_nonempty(name: &str) -> Option<String> {
 }
 
 impl JevClient {
+    /// Key supplied by the app (OS credential store); base URL / model still come
+    /// from `SAAN_JEV_URL` / `SAAN_JEV_MODEL` or the defaults, the agent from the
+    /// same timeout as [`JevClient::from_env`]. No environment gating: the caller
+    /// decides whether Jev is enabled.
+    pub fn new(key: String, privacy: Privacy) -> Self {
+        let base_url = env_nonempty("SAAN_JEV_URL").unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
+        let model = env_nonempty("SAAN_JEV_MODEL").unwrap_or_else(|| DEFAULT_MODEL.to_string());
+        let agent = ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).build().into();
+        Self { key, privacy, base_url: base_url.trim_end_matches('/').to_string(), model, agent }
+    }
+
+    /// The privacy level this client sends at.
+    pub fn privacy(&self) -> Privacy {
+        self.privacy
+    }
+
     /// `None` (and therefore zero network traffic) unless `SAAN_JEV` is
     /// `on`/`1`/`true` and `JEV_API_KEY` is set. The key is read from nowhere else.
     pub fn from_env() -> Option<Self> {
@@ -75,10 +100,7 @@ impl JevClient {
         }
         let key = env_nonempty("JEV_API_KEY")?;
         let privacy = env_nonempty("SAAN_JEV_PRIVACY").and_then(|v| Privacy::parse(&v)).unwrap_or(Privacy::Query);
-        let base_url = env_nonempty("SAAN_JEV_URL").unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
-        let model = env_nonempty("SAAN_JEV_MODEL").unwrap_or_else(|| DEFAULT_MODEL.to_string());
-        let agent = ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).build().into();
-        Some(Self { key, privacy, base_url: base_url.trim_end_matches('/').to_string(), model, agent })
+        Some(Self::new(key, privacy))
     }
 
     /// Body for choosing a search mode. Contains only the query, at every level.

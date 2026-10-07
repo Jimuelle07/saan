@@ -11,13 +11,82 @@
       <div class="bar">
         <span id="mode" class="mode">semantic</span>
         <input id="query" type="text" placeholder="saan? describe it, grep: text, glob: *.pdf" autocomplete="off" spellcheck="false" autofocus />
+        <button id="gear" type="button" aria-label="Settings" title="Settings (Ctrl+,)">⚙</button>
         <span id="timing" class="timing"></span>
       </div>
       <ul id="results" role="listbox"></ul>
-      <form id="setup" class="setup" hidden>
-        <input id="root" type="text" placeholder="Folder to index, e.g. C:\Users\you\Documents" spellcheck="false" />
-        <button type="submit">Index</button>
-      </form>
+      <section id="settings" aria-label="Settings" hidden>
+        <div class="sec">
+          <h3>Appearance</h3>
+          <div class="swatches">
+            <button type="button" class="swatch blue" id="swatch-blue" aria-label="Blue theme" aria-pressed="false"><span class="dot"></span>Blue</button>
+            <button type="button" class="swatch violet" id="swatch-violet" aria-label="Violet theme" aria-pressed="false"><span class="dot"></span>Violet</button>
+            <button type="button" class="swatch green" id="swatch-green" aria-label="Green theme" aria-pressed="false"><span class="dot"></span>Green</button>
+            <button type="button" class="swatch orange" id="swatch-orange" aria-label="Orange theme" aria-pressed="false"><span class="dot"></span>Orange</button>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h3>Folders</h3>
+          <ul id="roots"></ul>
+          <div class="row">
+            <button type="button" id="add-folder">Add folder…</button>
+            <button type="button" id="add-suggested" hidden>Add suggested folders</button>
+            <span id="settings-loading">Loading settings…</span>
+          </div>
+          <div class="row">
+            <label class="field">Max file size (MB)
+              <input id="max-mb" type="number" min="1" step="1" inputmode="numeric" />
+            </label>
+            <label class="field">Index speed
+              <select id="speed">
+                <option value="background">Background (2 threads)</option>
+                <option value="fast">Fast (all cores)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h3>Index</h3>
+          <div class="row">
+            <button type="button" id="start-index" class="primary">Start indexing</button>
+            <button type="button" id="cancel-index" disabled>Cancel</button>
+          </div>
+          <div class="track"><div id="idx-fill"></div></div>
+          <div class="idx-meta">
+            <span id="idx-count">0 / 0</span>
+            <span id="idx-eta"></span>
+            <span id="idx-current" title=""></span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h3>Jev</h3>
+          <label class="check"><input type="checkbox" id="jev-enable" />Enable Jev</label>
+          <div class="row">
+            <input id="jev-key" type="password" placeholder="Jev API key" autocomplete="new-password" spellcheck="false" />
+            <button type="button" id="jev-save" class="primary">Save key</button>
+            <button type="button" id="jev-remove">Remove</button>
+          </div>
+          <div class="row notes">
+            <span id="jev-state">No key</span>
+            <span id="jev-env" hidden>Using JEV_API_KEY from environment</span>
+          </div>
+          <div class="privacies">
+            <button type="button" class="privacy" id="priv-a" aria-label="Privacy A: query only" aria-pressed="false">
+              <strong>A · query only</strong><span>Only the search query is sent.</span>
+            </button>
+            <button type="button" class="privacy" id="priv-b" aria-label="Privacy B: query and paths" aria-pressed="false">
+              <strong>B · query + paths</strong><span>Candidate file paths are sent too.</span>
+            </button>
+            <button type="button" class="privacy" id="priv-c" aria-label="Privacy C: query, paths and snippets" aria-pressed="false">
+              <strong>C · query + paths + snippets</strong><span>Short snippets (up to 160 chars) are sent too.</span>
+            </button>
+          </div>
+          <p class="note">Jev adds ~0.5 s to ambiguous searches.</p>
+        </div>
+      </section>
       <footer id="status"></footer>
     </main>
     <script type="module" src="/src/main.ts"></script>

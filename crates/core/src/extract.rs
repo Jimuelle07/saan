@@ -1,39 +1,36 @@
 //! File discovery and text extraction.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Files larger than this are skipped for embedding (grep still scans them).
 pub const MAX_INDEX_BYTES: u64 = 2 * 1024 * 1024;
 
-/// Directory names never walked: dependency/build caches that hold no user code
-/// and would otherwise flood the index and grep results.
-const SKIP_DIRS: &[&str] = &["node_modules", "target", "__pycache__", ".venv", "venv"];
+/// Directory names never walked, matched case-insensitively by directory name:
+/// dependency/build caches and OS directories that hold no user code and would
+/// otherwise flood the index and grep results. See `Scope::files`.
+pub const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".git",
+    "$Recycle.Bin",
+    "System Volume Information",
+    "Windows",
+    "Program Files",
+    "Program Files (x86)",
+    "ProgramData",
+    "AppData",
+];
 
-/// Walk `root` respecting .gitignore/.ignore and hidden-file rules, pruning the
-/// `SKIP_DIRS` directories (and everything below them).
-pub fn walk_files(root: &Path) -> Vec<PathBuf> {
-    let root_owned = root.to_path_buf();
-    let mut builder = ignore::WalkBuilder::new(root);
-    builder.filter_entry(move |e| {
-        // Never prune the root itself, even if it happens to be named `target`.
-        if e.path() == root_owned.as_path() {
-            return true;
-        }
-        if !e.file_type().is_some_and(|t| t.is_dir()) {
-            return true;
-        }
-        let name = e.file_name();
-        !SKIP_DIRS.iter().any(|d| name == *d)
-    });
-    let mut files: Vec<PathBuf> = builder
-        .build()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
-        .map(|e| e.into_path())
-        .collect();
-    files.sort();
-    files
-}
+/// Extensions whose contents are worth embedding: text, docs and source code.
+const CONTENT_EXTS: &[&str] = &[
+    "md", "markdown", "txt", "rst", "org", "tex", "csv", "tsv", "json", "yaml", "yml", "toml",
+    "ini", "cfg", "xml", "html", "htm", "css", "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "rs",
+    "go", "java", "kt", "c", "h", "cpp", "hpp", "cc", "cs", "rb", "php", "swift", "sh", "ps1",
+    "bat", "sql", "lua", "r", "m", "scala", "dart", "vue", "svelte", "log",
+];
 
 /// True when the first 8 KiB contain a NUL byte.
 pub fn looks_binary(bytes: &[u8]) -> bool {
@@ -43,6 +40,17 @@ pub fn looks_binary(bytes: &[u8]) -> bool {
 fn is_pdf(path: &Path) -> bool {
     path.extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+}
+
+/// True when a file's contents are worth embedding: PDFs and text/doc/code
+/// extensions. Other files are never embedded but stay glob/grep-able.
+pub fn is_content_file(path: &Path) -> bool {
+    if is_pdf(path) {
+        return true;
+    }
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| CONTENT_EXTS.iter().any(|known| ext.eq_ignore_ascii_case(known)))
 }
 
 /// Extract indexable text, or `None` for binary/unsupported/oversized files.

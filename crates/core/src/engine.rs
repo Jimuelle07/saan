@@ -1,13 +1,14 @@
 //! Ties routing, semantic search, grep and glob together.
 
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::embed::Embedder;
+use crate::embed::{EmbedOptions, Embedder};
 use crate::index::Index;
 use crate::jev::{Candidate, JevClient};
 use crate::router::{local_route, Mode, Route, RouteSource, CONFIDENT};
@@ -16,10 +17,12 @@ use crate::router::{local_route, Mode, Route, RouteSource, CONFIDENT};
 const PICK_MARGIN: f32 = 0.02;
 const PICK_CANDIDATES: usize = 5;
 const GREP_HIT_LIMIT: usize = 500;
+/// Query embeddings kept for reuse; see [`QueryCache`].
+const QUERY_CACHE_CAP: usize = 256;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Hit {
-    /// Root-relative path with forward slashes; unique per file.
+    /// Display path with forward slashes; unique per file.
     pub rel: String,
     /// Absolute path to open.
     pub path: String,
@@ -47,22 +50,59 @@ pub struct SearchResponse {
     pub elapsed_ms: f64,
 }
 
+/// Recently embedded queries, so a repeat search skips the model entirely.
+/// Dropped whenever the embedder is unloaded: the vectors only make sense
+/// alongside the session (and options) that produced them.
+#[derive(Default)]
+struct QueryCache {
+    map: HashMap<String, Arc<Vec<f32>>>,
+    order: VecDeque<String>,
+}
+
+impl QueryCache {
+    fn get(&self, query: &str) -> Option<Arc<Vec<f32>>> {
+        self.map.get(query).cloned()
+    }
+
+    /// Insert, evicting oldest-first past [`QUERY_CACHE_CAP`].
+    fn insert(&mut self, query: String, vector: Arc<Vec<f32>>) {
+        if self.map.insert(query.clone(), vector).is_none() {
+            self.order.push_back(query);
+        }
+        while self.order.len() > QUERY_CACHE_CAP {
+            if let Some(oldest) = self.order.pop_front() {
+                self.map.remove(&oldest);
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+    }
+}
+
 pub struct Engine {
     pub index: Index,
     /// Where the model lives; the ONNX session is opened lazily.
     model_dir: PathBuf,
     /// The embedder, loaded on demand and dropped again when it goes idle.
     embedder: Mutex<Option<Arc<Embedder>>>,
+    /// Options the embedder is loaded with; changing them drops the session.
+    embed_options: Mutex<EmbedOptions>,
+    /// Query embeddings reusable while the model stays loaded.
+    query_cache: Mutex<QueryCache>,
     /// When the embedder was last needed (load or query), for idle unloading.
     last_use: Mutex<Instant>,
-    jev: Option<JevClient>,
+    /// Swappable so the app can add or remove the Jev key at runtime.
+    jev: RwLock<Option<Arc<JevClient>>>,
 }
 
 fn file_name(rel: &str) -> String {
     rel.rsplit('/').next().unwrap_or(rel).to_string()
 }
 
-/// Lowercase extension of a root-relative path, without the dot.
+/// Lowercase extension of a display path, without the dot.
 fn file_ext(rel: &str) -> String {
     let name = file_name(rel);
     match name.rsplit_once('.') {
@@ -95,16 +135,58 @@ impl Engine {
     /// semantic query loads it, [`Engine::preload`] loads it eagerly and
     /// [`Engine::release_if_idle`] drops it again once search goes quiet.
     pub fn new(index: Index, model_dir: PathBuf, jev: Option<JevClient>) -> Self {
-        Self { index, model_dir, embedder: Mutex::new(None), last_use: Mutex::new(Instant::now()), jev }
+        Self {
+            index,
+            model_dir,
+            embedder: Mutex::new(None),
+            embed_options: Mutex::new(EmbedOptions::default()),
+            query_cache: Mutex::new(QueryCache::default()),
+            last_use: Mutex::new(Instant::now()),
+            jev: RwLock::new(jev.map(Arc::new)),
+        }
     }
 
     pub fn jev_enabled(&self) -> bool {
-        self.jev.is_some()
+        self.jev.read().expect("jev lock").is_some()
+    }
+
+    /// Install or remove the Jev client (the app owns the key). Takes effect on
+    /// the next search; a search already in flight keeps the client it started with.
+    pub fn set_jev(&self, jev: Option<JevClient>) {
+        *self.jev.write().expect("jev lock") = jev.map(Arc::new);
+    }
+
+    /// Set the embedding options. Changing them drops the loaded model so the
+    /// next query reloads it (and picks up e.g. a new thread count).
+    pub fn set_embed_options(&self, opts: EmbedOptions) {
+        // Same lock order as `embedder()`: embedder, then options.
+        let mut slot = self.embedder.lock().expect("embedder lock");
+        let changed = {
+            let mut current = self.embed_options.lock().expect("embed options lock");
+            if *current == opts {
+                false
+            } else {
+                *current = opts;
+                true
+            }
+        };
+        if !changed {
+            return;
+        }
+        slot.take();
+        drop(slot);
+        self.query_cache.lock().expect("query cache lock").clear();
     }
 
     /// True while the ONNX session is resident in memory.
     pub fn model_loaded(&self) -> bool {
         self.embedder.lock().expect("embedder lock").is_some()
+    }
+
+    /// Forget cached query embeddings, so the next search embeds its query afresh
+    /// (benchmarks measure model latency this way, not cache hits).
+    pub fn clear_query_cache(&self) {
+        self.query_cache.lock().expect("query cache lock").clear();
     }
 
     /// Load the model now instead of waiting for the first semantic query.
@@ -113,11 +195,16 @@ impl Engine {
     }
 
     /// Drop the model once it has been unused for `idle`; true when unloaded.
+    /// The query cache goes with it.
     pub fn release_if_idle(&self, idle: Duration) -> bool {
         if self.last_use.lock().expect("last use lock").elapsed() < idle {
             return false;
         }
-        self.embedder.lock().expect("embedder lock").take().is_some()
+        let unloaded = self.embedder.lock().expect("embedder lock").take().is_some();
+        if unloaded {
+            self.query_cache.lock().expect("query cache lock").clear();
+        }
+        unloaded
     }
 
     /// The embedder, loading it on demand. The `Arc` outlives the lock, so
@@ -126,7 +213,8 @@ impl Engine {
     fn embedder(&self) -> Result<Arc<Embedder>> {
         let mut slot = self.embedder.lock().expect("embedder lock");
         if slot.is_none() {
-            *slot = Some(Arc::new(Embedder::load(&self.model_dir)?));
+            let opts = *self.embed_options.lock().expect("embed options lock");
+            *slot = Some(Arc::new(Embedder::load_with(&self.model_dir, opts)?));
         }
         let embedder = Arc::clone(slot.as_ref().expect("embedder was just loaded"));
         drop(slot);
@@ -134,12 +222,26 @@ impl Engine {
         Ok(embedder)
     }
 
+    /// The query embedding: from the cache when the model is already loaded,
+    /// otherwise embedded (which loads the model) and cached.
+    fn query_vector(&self, query: &str) -> Result<Arc<Vec<f32>>> {
+        if let Some(vector) = self.query_cache.lock().expect("query cache lock").get(query) {
+            return Ok(vector);
+        }
+        let embedder = self.embedder()?;
+        let vector = Arc::new(embedder.embed_query(query)?);
+        self.query_cache.lock().expect("query cache lock").insert(query.to_string(), Arc::clone(&vector));
+        Ok(vector)
+    }
+
     pub fn search(&self, input: &str, k: usize) -> Result<SearchResponse> {
         let start = Instant::now();
         let mut jev_calls = 0;
         let mut route = local_route(input);
+        // Cloned rather than held: a settings write must not wait on a network call.
+        let jev = self.jev.read().expect("jev lock").clone();
         if route.confidence < CONFIDENT {
-            if let Some(jev) = &self.jev {
+            if let Some(jev) = &jev {
                 jev_calls += 1;
                 if let Ok(mode) = jev.route(input.trim()) {
                     if mode != route.mode {
@@ -167,7 +269,7 @@ impl Engine {
         mark_same_names(&mut hits);
         if route.mode == Mode::Semantic && hits.len() >= 2 {
             let ambiguous = hits[0].score - hits[1].score < PICK_MARGIN || hits.iter().take(PICK_CANDIDATES).any(|h| h.same_name);
-            if let (true, Some(jev)) = (ambiguous, &self.jev) {
+            if let (true, Some(jev)) = (ambiguous, &jev) {
                 let candidates: Vec<Candidate> = hits
                     .iter()
                     .take(PICK_CANDIDATES)
@@ -187,18 +289,17 @@ impl Engine {
 
     /// Meaning search; loads the model on the first call.
     pub fn semantic(&self, query: &str, k: usize) -> Result<Vec<Hit>> {
-        let embedder = self.embedder()?;
-        let qv = embedder.embed_query(query)?;
+        let qv = self.query_vector(query)?;
         Ok(self
             .index
-            .search(&qv, k)
+            .search(qv.as_slice(), k)
             .into_iter()
             .map(|s| {
                 let f = &self.index.files[s.file];
                 Hit {
                     name: file_name(&f.rel),
                     path: self.index.abs_path(s.file).to_string_lossy().into_owned(),
-                    rel: f.rel.clone(),
+                    rel: self.index.display_rel(s.file),
                     score: s.score,
                     line: None,
                     snippet: self.index.chunks[s.chunk].preview.clone(),
@@ -212,18 +313,17 @@ impl Engine {
     }
 
     fn grep(&self, pattern: &str, k: usize) -> Result<Vec<Hit>> {
-        let root = &self.index.root;
+        let scope = self.index.scope();
         let mut hits: Vec<Hit> = Vec::new();
-        for g in crate::grep::grep(root, pattern, GREP_HIT_LIMIT)? {
+        for g in crate::grep::grep(&scope, pattern, GREP_HIT_LIMIT)? {
             // One row per file (first matching line); results stay file-oriented.
             if hits.last().is_some_and(|h| h.rel == g.rel) {
                 continue;
             }
-            let path = root.join(&g.rel);
-            let (size, modified) = file_meta(&path);
+            let (size, modified) = file_meta(&g.path);
             hits.push(Hit {
                 name: file_name(&g.rel),
-                path: path.to_string_lossy().into_owned(),
+                path: g.path.to_string_lossy().into_owned(),
                 score: 1.0,
                 line: Some(g.line),
                 snippet: g.text,
@@ -241,24 +341,20 @@ impl Engine {
     }
 
     fn glob(&self, pattern: &str, k: usize) -> Result<Vec<Hit>> {
-        let root = &self.index.root;
-        Ok(crate::glob::glob(root, pattern, k)?
+        let scope = self.index.scope();
+        Ok(crate::glob::glob(&scope, pattern, k)?
             .into_iter()
-            .map(|rel| {
-                let path = root.join(&rel);
-                let (size, modified) = file_meta(&path);
-                Hit {
-                    name: file_name(&rel),
-                    path: path.to_string_lossy().into_owned(),
-                    size,
-                    modified,
-                    ext: file_ext(&rel),
-                    rel,
-                    score: 1.0,
-                    line: None,
-                    snippet: String::new(),
-                    same_name: false,
-                }
+            .map(|g| Hit {
+                name: file_name(&g.rel),
+                path: g.path.to_string_lossy().into_owned(),
+                size: g.size,
+                modified: g.mtime,
+                ext: file_ext(&g.rel),
+                score: 1.0,
+                line: None,
+                snippet: String::new(),
+                same_name: false,
+                rel: g.rel,
             })
             .collect())
     }

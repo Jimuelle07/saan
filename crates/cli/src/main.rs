@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use saan_core::embed::{find_model_dir, Embedder, MODEL_DIR_NAME, MODEL_FILES, MODEL_REPO};
+use saan_core::index::{BuildEvent, BuildOptions};
 use saan_core::jev::JevClient;
-use saan_core::{Engine, Index};
+use saan_core::{Engine, Index, Scope};
 use serde::Deserialize;
 
 /// saan ("where?"): local semantic file search, grep and glob.
@@ -29,8 +30,15 @@ struct Cli {
 enum Cmd {
     /// Download EmbeddingGemma (ONNX, int8) into ./models.
     FetchModel,
-    /// Embed every supported file under ROOT (unchanged files are reused).
-    Index { root: PathBuf },
+    /// Embed every supported file under one or more ROOT folders (unchanged files are reused).
+    Index {
+        /// One or more root folders to index.
+        #[arg(required = true)]
+        roots: Vec<PathBuf>,
+        /// Skip files larger than this many megabytes.
+        #[arg(long, default_value_t = 10)]
+        max_file_mb: u64,
+    },
     /// Routed search: semantic by default; `grep:`, `glob:`, `/regex/` prefixes force a mode.
     Search {
         query: Vec<String>,
@@ -39,17 +47,25 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// Regex search inside files under ROOT.
+    /// Regex search inside files under one or more roots.
     Grep {
         pattern: String,
+        /// Root folder to search (repeatable).
         #[arg(long, default_value = ".")]
-        root: PathBuf,
+        root: Vec<PathBuf>,
+        /// Skip files larger than this many megabytes.
+        #[arg(long, default_value_t = 10)]
+        max_file_mb: u64,
     },
-    /// File name / path pattern search under ROOT.
+    /// File name / path pattern search under one or more roots.
     Glob {
         pattern: String,
+        /// Root folder to search (repeatable).
         #[arg(long, default_value = ".")]
-        root: PathBuf,
+        root: Vec<PathBuf>,
+        /// Skip files larger than this many megabytes.
+        #[arg(long, default_value_t = 10)]
+        max_file_mb: u64,
     },
     /// Top-k hit rate on an eval file of {query, expected} pairs; fails below --min.
     Eval {
@@ -176,6 +192,18 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
     sorted[rank.clamp(1, sorted.len()) - 1]
 }
 
+/// ETA in the compact form the index progress line shows: `42s`, `1m23s`, `2h05m`.
+fn fmt_eta(secs: u64) -> String {
+    let (h, m, s) = (secs / 3600, (secs % 3600) / 60, secs % 60);
+    if h > 0 {
+        format!("{h}h{m:02}m")
+    } else if m > 0 {
+        format!("{m}m{s:02}s")
+    } else {
+        format!("{s}s")
+    }
+}
+
 fn run(cli: &Cli) -> Result<bool> {
     let Some(cmd) = &cli.cmd else {
         launch_app()?;
@@ -183,12 +211,41 @@ fn run(cli: &Cli) -> Result<bool> {
     };
     match cmd {
         Cmd::FetchModel => fetch_model()?,
-        Cmd::Index { root } => {
+        Cmd::Index { roots, max_file_mb } => {
+            let scope = Scope::new(roots.clone(), max_file_mb.saturating_mul(1024 * 1024));
             let embedder = load_embedder()?;
             let dir = index_dir(cli);
             let previous = Index::load(&dir).ok();
             let start = Instant::now();
-            let (index, stats) = Index::build(root, &embedder, previous.as_ref(), |rel| eprintln!("embed  {rel}"))?;
+            let mut last_print: Option<Instant> = None;
+            let (index, stats) = Index::build(
+                &scope,
+                &embedder,
+                previous.as_ref(),
+                &BuildOptions { checkpoint_every: 0 },
+                |ev| {
+                    if let BuildEvent::File { done, total, rel } = ev {
+                        let now = Instant::now();
+                        let due = last_print
+                            .map_or(true, |t| now.duration_since(t) >= Duration::from_millis(250));
+                        if due {
+                            let eta = if done == 0 {
+                                "--".to_string()
+                            } else {
+                                fmt_eta(
+                                    (start.elapsed().as_secs_f64()
+                                        * total.saturating_sub(done) as f64
+                                        / done as f64)
+                                        as u64,
+                                )
+                            };
+                            eprintln!("[{done}/{total}] eta {eta}  {rel}");
+                            last_print = Some(now);
+                        }
+                    }
+                    true
+                },
+            )?;
             index.save(&dir)?;
             println!(
                 "indexed {} files ({} re-embedded, {} reused, {} chunks) in {:.1}s -> {}",
@@ -213,14 +270,16 @@ fn run(cli: &Cli) -> Result<bool> {
                 }
             }
         }
-        Cmd::Grep { pattern, root } => {
-            for h in saan_core::grep::grep(root, pattern, usize::MAX)? {
+        Cmd::Grep { pattern, root, max_file_mb } => {
+            let scope = Scope::new(root.clone(), max_file_mb.saturating_mul(1024 * 1024));
+            for h in saan_core::grep::grep(&scope, pattern, usize::MAX)? {
                 println!("{}:{}: {}", h.rel, h.line, h.text);
             }
         }
-        Cmd::Glob { pattern, root } => {
-            for rel in saan_core::glob::glob(root, pattern, usize::MAX)? {
-                println!("{rel}");
+        Cmd::Glob { pattern, root, max_file_mb } => {
+            let scope = Scope::new(root.clone(), max_file_mb.saturating_mul(1024 * 1024));
+            for h in saan_core::glob::glob(&scope, pattern, usize::MAX)? {
+                println!("{}", h.rel);
             }
         }
         Cmd::Eval { file, k, min } => {
@@ -251,6 +310,7 @@ fn run(cli: &Cli) -> Result<bool> {
             let mut times = Vec::with_capacity(cases.len() * runs);
             for _ in 0..*runs {
                 for case in &cases {
+                    engine.clear_query_cache(); // time the model, not the query cache
                     let t = Instant::now();
                     engine.search(&case.query, 10)?;
                     times.push(t.elapsed().as_secs_f64() * 1000.0);

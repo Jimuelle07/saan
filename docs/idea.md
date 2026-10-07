@@ -22,11 +22,21 @@ told apart.
   (300M params, 4-bit ONNX `model_q4.onnx`, ~197 MB). No file data leaves the machine unless the user
   opts into the Jev router.
 - **Fast.** Rust backend, brute-force cosine search over an in-memory index,
-  target p95 < 100 ms per warm query.
+  target p95 < 100 ms per warm query. CPU-only by measurement: on an RTX 4050
+  Laptop + i5-13420H the DirectML path was ~13× slower (p95 836–1072 ms vs
+  76–80 ms CPU, uncached `saan bench fixtures/eval.json`), so the GPU option
+  was removed.
+- **Indexes your folders, not the junk.** Any number of root folders, with live
+  progress, cancel and resume; files over a size cap (default 10 MB) and
+  system/heavy folders (`node_modules`, `.git`, `Windows`, `Program Files`, …)
+  stay hidden from every search mode.
 - **Lightweight.** One Tauri binary + one model folder. No Python, no server, no GPU
   required. Plain TypeScript UI (no framework). Footprint counts: the ~197 MB
   model is loaded lazily on the first semantic query and dropped again after a
   few idle minutes, so an unused launcher stays small.
+- **Settings that stay local.** Four themes (accent and text follow), folder
+  list, max file size, index speed — and the optional Jev key is
+  kept in the Windows Credential Manager, never on disk.
 - **Optional typed decisions.** [Jev](https://docs.typesafe.ai/api) (TypeSafe AI
   System One) can choose the search mode for ambiguous queries and pick between
   near-duplicate candidates. Off by default; three privacy levels control what is sent.

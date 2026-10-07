@@ -1,6 +1,6 @@
 //! Integration tests for [`saan_core::Engine`]: routing, semantic search, the
-//! guessed-search fallback and incremental reindexing, over a small copy of
-//! `fixtures/corpus`.
+//! guessed-search fallback, incremental reindexing and build cancellation, over
+//! a small copy of `fixtures/corpus`.
 //!
 //! Every test needs the EmbeddingGemma model (`models/embeddinggemma-300m`).
 //! When [`saan_core::embed::find_model_dir`] finds nothing the test prints
@@ -16,8 +16,9 @@
 use std::path::{Path, PathBuf};
 
 use saan_core::embed::Embedder;
+use saan_core::index::{BuildEvent, BuildOptions};
 use saan_core::router::{CONFIDENT, RouteSource};
-use saan_core::{Engine, Index, Mode};
+use saan_core::{Engine, Index, Mode, Scope};
 
 /// The corpus files each test indexes: recipes, code, notes, a PDF and both
 /// same-name pairs the tests assert on. Small so the model stays fast.
@@ -73,8 +74,15 @@ fn fresh_subset_root(test: &str) -> Option<PathBuf> {
 fn engine_for(root: &Path) -> Option<(Engine, PathBuf)> {
     let model_dir = saan_core::embed::find_model_dir()?;
     let embedder = Embedder::load(&model_dir).expect("loading embedder");
-    let (index, _stats) = Index::build(root, &embedder, None, |_| {}).expect("building index");
-    let temp_root = index.root.clone();
+    let (index, _stats) = Index::build(
+        &Scope::single(root),
+        &embedder,
+        None,
+        &BuildOptions { checkpoint_every: 0 },
+        |_| true,
+    )
+    .expect("building index");
+    let temp_root = index.roots[0].clone();
     Some((Engine::new(index, model_dir, None), temp_root))
 }
 
@@ -187,8 +195,10 @@ fn model_loads_lazily_and_unloads_when_idle() {
 fn rebuild_reuses_unchanged_files_and_reindexes_the_changed_one() {
     let Some(dir) = fresh_subset_root("incremental") else { return };
     let Some(embedder) = embedder_or_skip() else { return };
+    let scope = Scope::single(&dir);
+    let opts = BuildOptions { checkpoint_every: 0 };
 
-    let (first, stats) = Index::build(&dir, &embedder, None, |_| {}).expect("building index");
+    let (first, stats) = Index::build(&scope, &embedder, None, &opts, |_| true).expect("building index");
     assert_eq!(stats.files_seen, SUBSET.len(), "every copied file is walked");
     let files = first.files.len();
     assert_eq!(stats.files_indexed, files);
@@ -199,7 +209,7 @@ fn rebuild_reuses_unchanged_files_and_reindexes_the_changed_one() {
 
     // Nothing changed: every file comes from the previous index.
     let (reused, stats) =
-        Index::build(&dir, &embedder, Some(&first), |_| {}).expect("rebuilding index");
+        Index::build(&scope, &embedder, Some(&first), &opts, |_| true).expect("rebuilding index");
     assert_eq!(stats.files_indexed, 0);
     assert_eq!(stats.files_reused, files);
     assert_eq!(reused.files.len(), files);
@@ -209,9 +219,59 @@ fn rebuild_reuses_unchanged_files_and_reindexes_the_changed_one() {
     let rewritten = "sourdough schedule: feed the starter twice a day for a week, then bake.";
     std::fs::write(dir.join("recipes/sourdough.md"), rewritten).expect("rewriting a corpus file");
     let (_, stats) =
-        Index::build(&dir, &embedder, Some(&reused), |_| {}).expect("rebuilding index");
+        Index::build(&scope, &embedder, Some(&reused), &opts, |_| true).expect("rebuilding index");
     assert_eq!(stats.files_indexed, 1);
     assert_eq!(stats.files_reused, files - 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cancelled_build_yields_a_partial_index_the_next_build_reuses() {
+    let Some(dir) = fresh_subset_root("cancel") else { return };
+    let Some(embedder) = embedder_or_skip() else { return };
+    let scope = Scope::single(&dir);
+    let opts = BuildOptions { checkpoint_every: 0 };
+
+    // Refuse to continue once the second file is announced: only the first file
+    // is embedded, so the partial index holds a single file.
+    let mut announced = 0usize;
+    let (partial, stats) = Index::build(&scope, &embedder, None, &opts, |event| {
+        if matches!(event, BuildEvent::File { .. }) {
+            announced += 1;
+            if announced >= 2 {
+                return false;
+            }
+        }
+        true
+    })
+    .expect("building index");
+
+    assert!(stats.cancelled, "stats: {stats:?}");
+    assert_eq!(announced, 2, "the build stops on the second announcement");
+    assert_eq!(stats.files_seen, SUBSET.len());
+    assert_eq!(stats.files_indexed, 1, "the first file was embedded before the cancel");
+    assert_eq!(partial.files.len(), 1);
+    assert!(partial.files.len() < SUBSET.len(), "a cancelled index is incomplete");
+    assert_eq!(stats.chunks, partial.chunks.len());
+
+    // The partial index is searchable on its own.
+    let query = embedder.embed_query("dijkstra shortest path through a weighted graph").expect("embedding");
+    assert!(!partial.search(&query, 5).is_empty());
+
+    // Rebuilding on top of it reuses what it holds and finishes the rest.
+    let (full, stats) =
+        Index::build(&scope, &embedder, Some(&partial), &opts, |_| true).expect("rebuilding index");
+    assert!(!stats.cancelled);
+    assert!(
+        stats.files_reused >= partial.files.len(),
+        "reused {} of the partial index's {} files",
+        stats.files_reused,
+        partial.files.len()
+    );
+    assert_eq!(stats.files_reused, partial.files.len(), "exactly the partial files are reused");
+    assert_eq!(full.files.len(), stats.files_reused + stats.files_indexed);
+    assert!(full.files.len() > partial.files.len(), "the rebuilt index is complete");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

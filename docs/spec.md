@@ -11,9 +11,10 @@ Context: `docs/idea.md` (intent), `docs/system-design` (architecture as
 implemented), `README.md` (usage). Requirements reference real files, real test
 function names and real CLI commands; no other flags exist.
 
-Prerequisites for the semantic requirements (R3–R5, R9): the EmbeddingGemma
-model at `models/embeddinggemma-300m` (`saan fetch-model`, or `SAAN_MODEL_DIR`)
-and a built release CLI. Requirements whose verification needs the model are
+Prerequisites for the semantic requirements (R3–R5, R9, R14, R15): the
+EmbeddingGemma model at `models/embeddinggemma-300m` (`saan fetch-model`, or
+`SAAN_MODEL_DIR`) and a built release CLI. Requirements whose verification needs
+the model are
 "model-gated": when the model is absent the test MUST be skipped, not failed, so
 R1 stays green on machines without the weights.
 
@@ -102,12 +103,15 @@ engine (no Jev).
 
 ### R6 — Grep and glob return exact results, with same-name files distinct
 
-**Statement.** `grep` MUST be line-oriented and smart-case (case-insensitive
-unless the pattern contains an uppercase letter) and MUST error on an invalid
-regex; `glob` MUST be case-insensitive, match a bare pattern against the file
-name at any depth and a pattern containing `/` against the root-relative path.
-Both MUST return the exact expected result sets for the committed corpus, and
-same-name files MUST be reported as distinct relative paths, never merged or
+**Statement.** `grep(scope, pattern, limit)` MUST be line-oriented and
+smart-case (case-insensitive unless the pattern contains an uppercase letter)
+and MUST error on an invalid regex; `glob(scope, pattern, limit)` MUST be
+case-insensitive, match a bare pattern against the file name at any depth and a
+pattern containing `/` against either the per-root relative path or the display
+relative path. Both MUST walk the given `Scope` — its roots and file-size cap,
+with hidden-file/`.gitignore` rules and `SKIP_DIRS` applied (see R13) — and
+both MUST return the exact expected result sets for the committed corpus, with
+same-name files reported as distinct relative paths, never merged or
 duplicated.
 
 **Acceptance check.** The tests below pass under `cargo test --workspace`;
@@ -127,26 +131,32 @@ independently, `saan glob --root fixtures/corpus todo.txt` prints exactly
 ### R7 — Jev is off by default and bounded by privacy levels
 
 **Statement.** The Jev decision layer MUST make zero network requests unless
-`SAAN_JEV` is `on`/`1`/`true` **and** `JEV_API_KEY` is set; the API key MUST be
-read from `JEV_API_KEY` and from nowhere else. The routing request MUST carry
-only the query at every level. The candidate-pick request MUST obey the privacy
-level: level `a` (default) MUST NOT build or send a pick request, level `b` MUST
-send only the query plus candidate relative paths, level `c` MUST send the query,
-candidate relative paths and snippets truncated to `SNIPPET_CHARS` (160)
-characters. Absolute paths, file contents beyond the snippet and index data MUST
-never be sent, and a dead endpoint MUST surface as an error rather than a panic
-or a hang.
+`SAAN_JEV` is `on`/`1`/`true` **and** an API key is available. The API key MUST
+come from the `JEV_API_KEY` environment variable **or** the OS credential store
+(Windows Credential Manager via the `keyring` crate, service `saan`, user
+`jev-api-key`) and MUST NEVER be read from a file; when `SAAN_JEV` and
+`JEV_API_KEY` are both set the environment overrides the stored key, and the
+stored key MUST NOT be written to `config.json` or logs. The routing request
+MUST carry only the query at every level. The candidate-pick request MUST obey
+the privacy level: level `a` (default) MUST NOT build or send a pick request,
+level `b` MUST send only the query plus candidate relative paths, level `c` MUST
+send the query, candidate relative paths and snippets truncated to
+`SNIPPET_CHARS` (160) characters. Absolute paths, file contents beyond the
+snippet and index data MUST never be sent, and a dead endpoint MUST surface as
+an error rather than a panic or a hang.
 
 **Acceptance check.** `env_gating_and_privacy_levels` passes: it drives a local
 mock HTTP server (bound to `127.0.0.1:0`) and asserts the gating cases, one
 recorded `POST /v1/systemone` with `Authorization: Bearer <key>` for routing,
 the level `a`/`b`/`c` payload shapes and snippet truncation, and an `Err` for an
 unreachable endpoint. A repository check that `JEV_API_KEY` occurs only as the
-environment-variable name in `crates/core/src/jev.rs` and the docs confirms the
-key comes from no other source.
+environment-variable name in `crates/core/src/jev.rs`, `src-tauri/src/main.rs`
+and the docs, and that no source reads a key from a file path — the only key
+inputs are `JevClient::from_env()` and `JevClient::new(key, privacy)` fed from
+the `keyring` store — confirms the key comes from no other source.
 
 **Verifying artifact.** `env_gating_and_privacy_levels` in
-`crates/core/tests/jev.rs`.
+`crates/core/tests/jev.rs`, plus the repository checks named above.
 
 ### R8 — The local router follows fixed rules
 
@@ -228,6 +238,103 @@ environment-variable name).
 and the `.gitignore` rules for `/models/`, `/.saan/`, `/.tools/`,
 `node_modules/`, `/dist/` and `.env`.
 
+### R12 — Settings panel and themes
+
+**Statement.** The desktop app MUST expose a settings view, opened by the gear
+button in the search bar and by `Ctrl+,` and closed by `Esc` before the window
+hides, containing: an Appearance section with exactly four themes (`blue`,
+`violet`, `green`, `orange`, default `blue`) where accent **and** text colours
+both follow the selection; a Folders section (root list with remove,
+"Add folder…" via the native picker, one-click add of the suggested
+Documents/Desktop/Downloads, max file size MB, index speed
+`background`|`fast`); an Index section (Start/Cancel with progress); a Jev
+section (password field with Save/Remove, a "key saved" state, enable toggle,
+privacy levels A/B/C with one-line descriptions, env-override notice). Settings MUST
+persist to `config.json` with every field `#[serde(default)]`, and the legacy
+`{"root": "..."}` shape MUST migrate to `roots: [root]`. The Jev key MUST be
+stored in the OS credential store (Windows Credential Manager, `keyring`
+service `saan`, user `jev-api-key`) and MUST NOT appear in `config.json` or
+logs; `JEV_API_KEY` + `SAAN_JEV` MUST override the saved key when set.
+
+**Acceptance check.** A manual UI smoke run: open settings with the gear and
+with `Ctrl+,`; switch each of the four themes and see accent and text recolour;
+add and remove a folder; set max file size and index speed; save a Jev key →
+"key saved" appears, `config.json` contains no key, Remove clears it; the
+env-override notice appears when `JEV_API_KEY` is set; `Esc` closes settings before the window hides.
+
+**Verifying artifact.** Manual UI smoke of the settings view in the running
+app, exercising `get_settings`, `save_settings`, `set_jev_key` and
+`pick_folder` in `src-tauri/src/main.rs`; `config.json` inspected for the
+absence of the key.
+
+### R13 — Multi-root scopes, with large and system files hidden
+
+**Statement.** Indexing, grep and glob MUST operate on a `Scope` of one or more
+roots with a `max_file_bytes` cap: CLI `saan index <ROOT>...` /
+`--max-file-mb` (default 10) and `--root` (repeatable), app `roots` +
+`max_file_mb` (default 10). With several roots every displayed path MUST carry
+its root label (`<label>/<rel>`, the drive for a drive root); files larger than
+the cap MUST NOT appear in semantic, grep or glob results; directories in
+`SKIP_DIRS` (`node_modules`, `target`, `__pycache__`, `.venv`, `venv`, `.git`,
+`$Recycle.Bin`, `System Volume Information`, `Windows`, `Program Files`,
+`Program Files (x86)`, `ProgramData`, `AppData`) MUST be skipped
+case-insensitively; `.gitignore`/`.ignore` and hidden-file rules MUST keep
+applying; and only content files (PDF plus the text/doc/code allow-list) MUST
+be embedded, while every other file remains glob- and grep-able.
+
+**Acceptance check.** The tests below pass under `cargo test --workspace`;
+independently, `saan grep --root <A> --root <B> <pattern>` prints hits whose
+rels carry both root labels, and an oversized file under a root yields no
+semantic, grep or glob hit.
+
+**Verifying artifact.** Tests in `crates/core/tests/grep_glob.rs`:
+`multi_root_display_rels_are_prefixed_and_paths_distinct`,
+`drive_root_label_is_the_drive`, `oversized_file_is_hidden_from_files_glob_and_grep`,
+`skip_dirs_are_not_walked`, `content_file_classification`.
+
+### R14 — Index progress, cancellation and resume
+
+**Statement.** `saan index <ROOT>...` MUST print progress on
+`BuildEvent::File` to stderr at most every 250 ms as
+`[done/total] eta 1m23s  rel`, then the usual summary line on stdout. The
+app's `start_index` MUST emit `index-progress` at most 4×/s with payload
+`{state, done, total, current, filesIndexed, filesReused, elapsedMs, message}`,
+MUST save the partial index and swap it into the engine every 200 embedded
+files (so search works during a long run), and `cancel_index` MUST stop the
+build with `BuildStats.cancelled = true` while keeping the partial index. A
+subsequent run MUST resume: unchanged files are counted in `files_reused` and
+never re-embedded.
+
+**Acceptance check.** The model-gated tests below pass under
+`cargo test --workspace`. `saan index fixtures/corpus --index <tmp>` prints
+`[N/M] eta …` lines to stderr and the summary to stdout; running it twice
+reports a non-zero `files_reused` on the second run. Manual app smoke: Start
+indexing a large folder, the progress bar shows done/total, ETA and the current
+file; Cancel flips the state to `cancelled`; Start again resumes with growing
+reuse counts.
+
+**Verifying artifact.** Tests in `crates/core/tests/engine.rs`:
+`rebuild_reuses_unchanged_files_and_reindexes_the_changed_one` and
+`cancelled_build_yields_a_partial_index_the_next_build_reuses` (both emit
+`BuildEvent::File` and assert reuse/cancel/resume), plus the `saan index`
+stderr progress check.
+
+### R15 — CPU-only by measurement
+
+**Statement.** Inference MUST run on the CPU execution provider: no GPU /
+DirectML execution provider is registered, and no settings, CLI or engine
+option selects one.
+
+**Rationale (recorded measurement).** Uncached `saan bench fixtures/eval.json`
+on an RTX 4050 Laptop + i5-13420H measured CPU p95 76–80 ms vs DirectML p95
+836–1072 ms — the 4-bit model's `MatMulNBits` / `GatherBlockQuantized` ops are
+not DirectML-native and bounce between devices — so the GPU option was removed.
+
+**Acceptance check.** `saan bench fixtures/eval.json` exits 0 with p95 < 100 ms
+(R5 gate), and the settings panel exposes no GPU/Performance control.
+
+**Verifying artifact.** `saan bench fixtures/eval.json`.
+
 ## Requirement → artifact
 
 | # | Requirement | Artifact |
@@ -243,6 +350,10 @@ and the `.gitignore` rules for `/models/`, `/.saan/`, `/.tools/`,
 | R9 | Engine behaviour | `crates/core/tests/engine.rs` |
 | R10 | Launcher smoke | `docs/system-design` Verification log |
 | R11 | No keys or weights committed | `.gitignore`; `git log` scans |
+| R12 | Settings panel, themes, key storage | Manual UI smoke; `config.json` without the key |
+| R13 | Multi-root Scope; large/skipped files hidden | `crates/core/tests/grep_glob.rs` |
+| R14 | Index progress, cancel, resume | `crates/core/tests/engine.rs`; `saan index` stderr progress |
+| R15 | CPU-only inference by measurement | `saan bench fixtures/eval.json` |
 
 ## Workflow
 
@@ -251,12 +362,12 @@ Every change follows the same loop:
 1. **Spec first.** Add or amend the numbered requirement here, including its
    acceptance check and verifying artifact, before writing code.
 2. **Failing test.** Add the test named in the requirement (or the CLI check,
-   for R3–R5 and R10), and confirm it fails for the intended reason.
+   for R3–R5, R10 and R15), and confirm it fails for the intended reason.
 3. **Implement.** Make the smallest change that satisfies the requirement.
 4. **Green.** The requirement's artifact passes, and R1 (plus R2 when the
    frontend or Tauri code changed) still passes.
 5. **Commit.** One commit per requirement, referencing its number; commits MUST
    NOT include co-author trailers.
-6. **Merge.** Merge to `main` only when every requirement R1–R11 passes; a
+6. **Merge.** Merge to `main` only when every requirement R1–R15 passes; a
    requirement may be waived only by an explicit note in `docs/system-design`
    recording the reason and the replacement check.

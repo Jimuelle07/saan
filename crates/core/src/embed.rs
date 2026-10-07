@@ -53,38 +53,75 @@ pub fn find_model_dir() -> Option<PathBuf> {
     })
 }
 
+/// How to load the ONNX session. `Default` = CPU with the default thread count.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EmbedOptions {
+    /// Intra-op threads. `None` = `$SAAN_THREADS`, else `min(cores, 8)`.
+    pub threads: Option<usize>,
+}
+
 pub struct Embedder {
     session: Mutex<Session>,
     tokenizer: Tokenizer,
     dim: usize,
 }
 
+/// Default intra-op thread count: `$SAAN_THREADS` if it parses to a non-zero
+/// integer, else `min(cores, 8)` (`4` when the core count is unknown).
+fn default_threads() -> usize {
+    std::env::var("SAAN_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get().min(8)))
+}
+
 impl Embedder {
-    /// Load with the default thread count: `$SAAN_THREADS`, else `min(cores, 8)`.
+    /// Load with the default options: CPU, thread count from `$SAAN_THREADS`
+    /// or `min(cores, 8)`.
     pub fn load(model_dir: &Path) -> Result<Self> {
-        let threads = std::env::var("SAAN_THREADS")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get().min(8)));
-        Self::load_with_threads(model_dir, threads)
+        Self::load_with(model_dir, EmbedOptions::default())
     }
 
     /// Load with an explicit ONNX Runtime intra-op thread count (`0` acts as 1).
     pub fn load_with_threads(model_dir: &Path, threads: usize) -> Result<Self> {
+        Self::load_with(model_dir, EmbedOptions { threads: Some(threads) })
+    }
+
+    /// Load the model with `opts`, on the CPU. GPU execution is deliberately not
+    /// offered: this 4-bit model's MatMulNBits / GatherBlockQuantized ops are not
+    /// DirectML-native, so on an RTX 4050 Laptop the DirectML p95 was ~13x the
+    /// CPU p95 (76-80 ms vs 836-1072 ms, `saan bench fixtures/eval.json`) as the
+    /// graph bounced between the two devices.
+    pub fn load_with(model_dir: &Path, opts: EmbedOptions) -> Result<Self> {
+        let threads = match opts.threads {
+            Some(n) => n.max(1),
+            None => default_threads(),
+        };
+        Self::open(model_dir, threads)
+    }
+
+    /// One complete load attempt: tokenizer, session and the probe embedding
+    /// that learns the dimension.
+    fn open(model_dir: &Path, threads: usize) -> Result<Self> {
         let tokenizer = Tokenizer::from_file(model_dir.join("tokenizer.json"))
             .map_err(|e| anyhow!("loading tokenizer: {e}"))?;
-        let ort_err = |e: ort::Error<_>| anyhow!("{e}");
-        let session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(ort_err)?
-            .with_intra_threads(threads.max(1))
-            .map_err(ort_err)?
-            .commit_from_file(model_dir.join("onnx").join(MODEL_FILE))
-            .with_context(|| format!("loading ONNX model from {}", model_dir.display()))?;
+        let session = Self::build_session(model_dir, threads)?;
         let mut me = Self { session: Mutex::new(session), tokenizer, dim: 0 };
         me.dim = me.embed_query("probe")?.len();
         Ok(me)
+    }
+
+    /// Build the ONNX session.
+    fn build_session(model_dir: &Path, threads: usize) -> Result<Session> {
+        let ort_err = |e: ort::Error<_>| anyhow!("{e}");
+        Session::builder()?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(ort_err)?
+            .with_intra_threads(threads)
+            .map_err(ort_err)?
+            .commit_from_file(model_dir.join("onnx").join(MODEL_FILE))
+            .with_context(|| format!("loading ONNX model from {}", model_dir.display()))
     }
 
     pub fn dim(&self) -> usize {
