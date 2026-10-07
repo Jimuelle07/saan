@@ -2,57 +2,41 @@
 
 # saan
 
-### Private, local AI file search for Windows
-
 *saan* is Filipino for **"where?"** — the question you ask when you're looking for a file.
 
-saan is a **privacy-first, local file launcher** by **Jimuelle Patron**. Instead of
-slowly guessing exact strings in a file explorer, you describe what you want and
-it finds the file, using one of three search modes:
-**semantic**, **grep** and **glob**.
+saan is a privacy-first, local file launcher. Instead of slowly guessing exact strings in a file explorer, you describe what you want and it finds the file, using one of three search modes:
+
+| Mode | Use when | Example query |
+|---|---|---|
+| **Semantic** | You remember what the file is *about* | `how long to proof bread dough overnight` |
+| **Grep** | You remember text *inside* the file | `grep: fn dijkstra` · `/TODO\(.*\)/` |
+| **Glob** | You remember the *name or path shape* | `glob: **/*.pdf` · `meeting-notes.md` |
 
 <br>
 
-**Core**
+Built by [Jimuelle Patron](https://github.com/Jimuelle07)
 
-[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Cargo](https://img.shields.io/badge/Cargo-E43717?style=for-the-badge&logo=rust&logoColor=white)](https://doc.rust-lang.org/cargo/)
-[![Tauri](https://img.shields.io/badge/Tauri_2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
-[![clap](https://img.shields.io/badge/clap_CLI-5C3EE8?style=for-the-badge&logo=gnubash&logoColor=white)](https://crates.io/crates/clap)
+[![Rust: 2021 edition](https://img.shields.io/badge/Rust-2021%20edition-CE422B?style=flat&labelColor=000000&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tauri: 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat&labelColor=1B1B1D&logo=tauri&logoColor=white)](https://tauri.app/)
+[![TypeScript: 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&labelColor=1E5A9E&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite: 6](https://img.shields.io/badge/Vite-6-9D8CFF?style=flat&labelColor=4B3FBF&logo=vite&logoColor=white)](https://vite.dev/)
+[![Node.js: npm](https://img.shields.io/badge/Node.js-npm-339933?style=flat&labelColor=1F5E1F&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![CLI: clap 4](https://img.shields.io/badge/CLI-clap%204-7B6CD9?style=flat&labelColor=3B2A8C)](https://crates.io/crates/clap)
 
-**Frontend**
+[![Embeddings: EmbeddingGemma 300M](https://img.shields.io/badge/Embeddings-EmbeddingGemma%20300M-4285F4?style=flat&labelColor=1A4FA0&logo=google&logoColor=white)](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
+[![Inference: ONNX Runtime (CPU)](https://img.shields.io/badge/Inference-ONNX%20Runtime%20%28CPU%29-005CED?style=flat&labelColor=00337F&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
+[![Tokenizers: Hugging Face](https://img.shields.io/badge/Tokenizers-Hugging%20Face-FFD21E?style=flat&labelColor=7A5C00&logo=huggingface&logoColor=white)](https://github.com/huggingface/tokenizers)
+[![Search: semantic | grep | glob](https://img.shields.io/badge/Search-semantic%20%7C%20grep%20%7C%20glob-1ABC9C?style=flat&labelColor=0B5D4B)](#query-syntax)
+[![Files: ignore | globset | regex | pdf-extract](https://img.shields.io/badge/Files-ignore%20%7C%20globset%20%7C%20regex%20%7C%20pdf--extract-8E5BA8?style=flat&labelColor=4A2E5C)](https://crates.io/crates/ignore)
+[![Decisions: TypeSafe Jev (optional)](https://img.shields.io/badge/Decisions-TypeSafe%20Jev%20%28optional%29-A77BE0?style=flat&labelColor=5B2C9E)](https://docs.typesafe.ai/api)
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite_6-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
-[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/docs/Web/HTML)
-[![CSS](https://img.shields.io/badge/CSS-663399?style=for-the-badge&logo=css&logoColor=white)](https://developer.mozilla.org/docs/Web/CSS)
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![npm](https://img.shields.io/badge/npm-CB3837?style=for-the-badge&logo=npm&logoColor=white)](https://www.npmjs.com/)
-
-**AI & Search**
-
-[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-005CED?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
-[![EmbeddingGemma](https://img.shields.io/badge/EmbeddingGemma_300M-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
-[![Hugging Face](https://img.shields.io/badge/HF_Tokenizers-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://github.com/huggingface/tokenizers)
-[![Regex](https://img.shields.io/badge/regex_%C2%B7_globset_%C2%B7_ignore-6E4A7E?style=for-the-badge&logo=rust&logoColor=white)](https://crates.io/crates/ignore)
-[![PDF](https://img.shields.io/badge/pdf--extract-EC1C24?style=for-the-badge&logo=files&logoColor=white)](https://crates.io/crates/pdf-extract)
-[![Jev](https://img.shields.io/badge/Jev_%28optional%29-111111?style=for-the-badge)](https://docs.typesafe.ai/api)
-
-**Platform & Tooling**
-
-[![Windows](https://img.shields.io/badge/Windows_10%2F11-0078D4?style=for-the-badge)](#installation-windows)
-[![PowerShell](https://img.shields.io/badge/PowerShell_5.1+-5391FE?style=for-the-badge)](scripts/install.ps1)
-[![WebView2](https://img.shields.io/badge/WebView2-0078D7?style=for-the-badge)](https://developer.microsoft.com/microsoft-edge/webview2/)
-[![Credential Manager](https://img.shields.io/badge/Keyring-Credential_Manager-2B2B2B?style=for-the-badge&logo=keepassxc&logoColor=white)](https://crates.io/crates/keyring)
-[![rustls](https://img.shields.io/badge/ureq_+_rustls-1D1D1D?style=for-the-badge&logo=letsencrypt&logoColor=white)](https://crates.io/crates/ureq)
-
-**Project**
-
-[![License](https://img.shields.io/badge/License-Apache_2.0-D22128?style=for-the-badge&logo=apache&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.1.0-2EA44F?style=for-the-badge)](Cargo.toml)
-[![Privacy](https://img.shields.io/badge/Privacy-Local--first-6E40C9?style=for-the-badge&logo=shieldsdotio&logoColor=white)](#privacy)
-[![Stars](https://img.shields.io/github/stars/Jimuelle07/saan?style=for-the-badge&logo=github&color=181717)](https://github.com/Jimuelle07/saan/stargazers)
-[![Author](https://img.shields.io/badge/Author-Jimuelle_Patron-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Jimuelle07)
+[![Platform: Windows 10 | 11](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-5B8FD9?style=flat&labelColor=1A3A6B)](#installation-windows)
+[![Webview: WebView2](https://img.shields.io/badge/Webview-WebView2-2F8FD8?style=flat&labelColor=0B4F80)](https://developer.microsoft.com/microsoft-edge/webview2/)
+[![Installer: PowerShell 5.1+](https://img.shields.io/badge/Installer-PowerShell%205.1%2B-5391FE?style=flat&labelColor=1E3F73)](scripts/install.ps1)
+[![Secrets: Credential Manager](https://img.shields.io/badge/Secrets-Credential%20Manager-6B6B6B?style=flat&labelColor=2B2B2B)](https://crates.io/crates/keyring)
+[![Privacy: local-first](https://img.shields.io/badge/Privacy-local--first-8957E5?style=flat&labelColor=4A1F7A)](#privacy)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-D22128?style=flat&labelColor=8A1A1A&logo=apache&logoColor=white)](LICENSE)
+[![Installs as: CLI | desktop app](https://img.shields.io/badge/Installs%20as-CLI%20%7C%20desktop%20app-E8A33D?style=flat&labelColor=8A4B0F)](#installation-windows)
 
 <br>
 
@@ -70,7 +54,6 @@ it finds the file, using one of three search modes:
 
 ## Table of Contents
 
-- [Overview](#overview)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Installation (Windows)](#installation-windows)
@@ -91,36 +74,21 @@ it finds the file, using one of three search modes:
 
 ---
 
-## Overview
-
-Pick the search mode that matches what you remember:
-
-| Mode | Use when | Example query |
-|---|---|---|
-| **Semantic** | You remember what the file is *about* | `how long to proof bread dough overnight` |
-| **Grep** | You remember text *inside* the file | `grep: fn dijkstra` · `/TODO\(.*\)/` |
-| **Glob** | You remember the *name or path shape* | `glob: **/*.pdf` · `meeting-notes.md` |
-
-Files that share a name (two `README.md`, three `todo.txt`) are always shown
-with their full, distinct relative path plus size, modification date and type,
-so same-name files are easy to tell apart at a glance.
-
----
-
 ## Features
 
-| | Feature | Details |
-|---|---|---|
-| 🔒 | **Local by default** | Files are embedded on-device with [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) (300M params, 4-bit ONNX, ~197 MB). No file data leaves the machine unless you opt into the Jev router. |
-| ⚡ | **Fast** | Rust backend with brute-force cosine search over an in-memory index; target p95 < 100 ms per warm query. |
-| 🪶 | **Lightweight** | One Tauri binary + one model folder. No Python, no server, no GPU. Plain TypeScript UI (no framework). |
-| 💤 | **Lazy model loading** | The model loads on the first semantic query and unloads after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds. Grep and glob never load it. |
-| 🧠 | **CPU-only inference** | Measured on an RTX 4050 Laptop + i5-13420H, the DirectML GPU path was ~13× slower (p95 836–1072 ms vs 76–80 ms on CPU, uncached `saan bench fixtures/eval.json`), so the GPU option was removed. |
-| 📁 | **Multi-folder indexing** | Index any number of root folders in the background with live progress (done/total, ETA, current file) and Start/Cancel. Partial indexes are saved as you go; restarting **resumes** and reuses unchanged files. |
-| 🧭 | **Three modes, one box** | A local router picks semantic, grep or glob from the query; explicit prefixes override it. |
-| 🤖 | **Optional typed decisions** | [Jev](https://docs.typesafe.ai/api) (TypeSafe AI System One) can route ambiguous queries and pick between near-duplicates. Off by default, with three privacy levels. |
-| 🎨 | **Settings panel** | Four themes, folder list, max file size, index speed, Jev key (stored in Windows Credential Manager) and privacy level. |
-| ⌨️ | **Global hotkey** | `Ctrl+Shift+Space` toggles the launcher from anywhere. |
+| Feature | Details |
+|---|---|
+| **Same-name files, disambiguated** | Files that share a name (two `README.md`, three `todo.txt`) are shown with their full relative path plus size, modification date and type. |
+| **Local by default** | Files are embedded on-device with [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) (300M params, 4-bit ONNX, ~197 MB). No file data leaves the machine unless you opt into the Jev router. |
+| **Fast** | Rust backend with brute-force cosine search over an in-memory index; target p95 < 100 ms per warm query. |
+| **Lightweight** | One Tauri binary + one model folder. No Python, no server, no GPU. Plain TypeScript UI (no framework). |
+| **Lazy model loading** | The model loads on the first semantic query and unloads after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds. Grep and glob never load it. |
+| **CPU-only inference** | Measured on an RTX 4050 Laptop + i5-13420H, the DirectML GPU path was ~13× slower (p95 836–1072 ms vs 76–80 ms on CPU, uncached `saan bench fixtures/eval.json`), so the GPU option was removed. |
+| **Multi-folder indexing** | Index any number of root folders in the background with live progress (done/total, ETA, current file) and Start/Cancel. Partial indexes are saved as you go; restarting **resumes** and reuses unchanged files. |
+| **Three modes, one box** | A local router picks semantic, grep or glob from the query; explicit prefixes override it. |
+| **Optional typed decisions** | [Jev](https://docs.typesafe.ai/api) (TypeSafe AI System One) can route ambiguous queries and pick between near-duplicates. Off by default, with three privacy levels. |
+| **Settings panel** | Four themes, folder list, max file size, index speed, Jev key (stored in Windows Credential Manager) and privacy level. |
+| **Global hotkey** | `Ctrl+Shift+Space` toggles the launcher from anywhere. |
 
 ---
 
@@ -457,7 +425,7 @@ folders target Windows.
 - GitHub: [@Jimuelle07](https://github.com/Jimuelle07)
 - Project: [github.com/Jimuelle07/saan](https://github.com/Jimuelle07/saan)
 
-If saan helps you find your files, consider giving the repository a ⭐.
+If saan helps you find your files, consider starring the repository.
 
 ---
 
