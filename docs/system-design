@@ -367,6 +367,11 @@ the app drop the model again when no semantic query has run for that long.
 | 2026-10-07 | `saan` typed in a fresh cmd window | cold start: launcher visible and in the foreground after ~1 s; second `saan`: the same single process focuses its window |
 | 2026-10-07 | Footprint (installed release) | model loaded: app 183 MB private, whole tree 325 MB. Hidden with `SAAN_IDLE_UNLOAD_SECS=40`: app 25 MB, tree 167 MB. Hidden idle CPU ≈ 110 ms per 30 s across all processes (was ~1% of a core with 3 s status polling). |
 | 2026-10-07 | UI smoke: `todo.txt` | both hits show a "same name" badge, the differing folder (`notes` / `work`) in bold, and `Text · 918 B · 8 h ago` / `Text · 849 B · 8 h ago` |
+| 2026-10-07 | Settings round: `cargo test --workspace` (4 unit + 7 engine + 20 grep/glob + 1 Jev), `npm run tauri build`, `saan eval` | all pass; 46/46 = 100% (also 100% with `MAX_CHUNKS_PER_FILE = 8`) |
+| 2026-10-07 | `saan bench` CPU vs DirectML (uncached, RTX 4050 Laptop) | CPU p95 76–80 ms; DirectML p95 836–1072 ms, so the GPU option was removed (R15) |
+| 2026-10-07 | Real folders (counts only) | Documents 262 files on disk / 232 visible; Desktop 704 / 274; Downloads 96,684 / 12,494. 0 of 177 files > 10 MB appear in glob results |
+| 2026-10-07 | Real indexing, Documents + Desktop with a 64-chunk cap, under heavy background load | 276 files, 1,622 chunks, 2,152 s. Chunk distribution showed an 8-chunk cap keeps 69% of the chunks, so the cap became 8 |
+| 2026-10-07 | App smoke (installed release) | settings opened automatically with no index; launched with `SAAN_ROOT`: footer and settings progress bar counted 62 files with ETA, done in 1:08. Blue, violet, green and orange each re-tint accent and text. Saving a Jev key showed "Key saved" and created Credential Manager entry `jev-api-key.saan`, with no key in `config.json`. Remove deleted the entry. `README.md` search after re-index: two same-name hits with metadata |
 
 The Tauri debug build (R2) can be run either as `npm run tauri build -- --debug`
 (the `tauri` npm script, using the `@tauri-apps/cli` devDependency) or as

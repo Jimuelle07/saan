@@ -347,7 +347,7 @@ async function save(): Promise<void> {
     setView(res);
     adoptSettings(res);
     syncSettings();
-    statusEl.textContent = "";
+    renderFooter();
   } catch (err) {
     statusEl.textContent = String(err);
   }
@@ -529,7 +529,11 @@ function renderFooter(): void {
     const model = s.model_loaded ? "model loaded" : "model sleeping";
     statusEl.textContent = `${s.files} files${folders ? ` · ${folders}` : ""} · ${jev} · ${model} · ${s.hotkey} to toggle · Enter open · Ctrl+Enter reveal`;
   } else if (lastStatus) {
-    statusEl.textContent = `Loading index… (${lastStatus.hotkey} toggles this window)`;
+    // Not ready and not indexing: there is no usable index for the saved folders.
+    statusEl.textContent =
+      lastStatus.roots.length === 0
+        ? `No folders yet: add one in Settings (Ctrl+,), then Start indexing · ${lastStatus.hotkey} toggles this window`
+        : `No index for these folders yet: open Settings (Ctrl+,) and Start indexing · ${lastStatus.hotkey} toggles this window`;
   }
 }
 
@@ -662,7 +666,7 @@ jevSaveEl.addEventListener("click", async () => {
     adoptIfFirst(res);
     jevKeyEl.value = ""; // the key is never echoed back
     syncSettings();
-    statusEl.textContent = "";
+    renderFooter();
   } catch (err) {
     statusEl.textContent = String(err);
   }
@@ -677,7 +681,7 @@ jevRemoveEl.addEventListener("click", async () => {
     adoptIfFirst(res);
     jevKeyEl.value = "";
     syncSettings();
-    statusEl.textContent = "";
+    renderFooter();
   } catch (err) {
     statusEl.textContent = String(err);
   }
