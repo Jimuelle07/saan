@@ -19,29 +19,15 @@ Built by [Jimuelle Patron](https://github.com/Jimuelle07)
 [![Rust: 2021 edition](https://img.shields.io/badge/Rust-2021%20edition-CE422B?style=flat&labelColor=000000&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri: 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat&labelColor=1B1B1D&logo=tauri&logoColor=white)](https://tauri.app/)
 [![TypeScript: 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&labelColor=1E5A9E&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite: 6](https://img.shields.io/badge/Vite-6-9D8CFF?style=flat&labelColor=4B3FBF&logo=vite&logoColor=white)](https://vite.dev/)
-[![Node.js: npm](https://img.shields.io/badge/Node.js-npm-339933?style=flat&labelColor=1F5E1F&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![CLI: clap 4](https://img.shields.io/badge/CLI-clap%204-7B6CD9?style=flat&labelColor=3B2A8C)](https://crates.io/crates/clap)
-
 [![Embeddings: EmbeddingGemma 300M](https://img.shields.io/badge/Embeddings-EmbeddingGemma%20300M-4285F4?style=flat&labelColor=1A4FA0&logo=google&logoColor=white)](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
 [![Inference: ONNX Runtime (CPU)](https://img.shields.io/badge/Inference-ONNX%20Runtime%20%28CPU%29-005CED?style=flat&labelColor=00337F&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
-[![Tokenizers: Hugging Face](https://img.shields.io/badge/Tokenizers-Hugging%20Face-FFD21E?style=flat&labelColor=7A5C00&logo=huggingface&logoColor=white)](https://github.com/huggingface/tokenizers)
-[![Search: semantic | grep | glob](https://img.shields.io/badge/Search-semantic%20%7C%20grep%20%7C%20glob-1ABC9C?style=flat&labelColor=0B5D4B)](#query-syntax)
-[![Files: ignore | globset | regex | pdf-extract](https://img.shields.io/badge/Files-ignore%20%7C%20globset%20%7C%20regex%20%7C%20pdf--extract-8E5BA8?style=flat&labelColor=4A2E5C)](https://crates.io/crates/ignore)
-[![Decisions: TypeSafe Jev (optional)](https://img.shields.io/badge/Decisions-TypeSafe%20Jev%20%28optional%29-A77BE0?style=flat&labelColor=5B2C9E)](https://docs.typesafe.ai/api)
-
 [![Platform: Windows 10 | 11](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-5B8FD9?style=flat&labelColor=1A3A6B)](#installation-windows)
-[![Webview: WebView2](https://img.shields.io/badge/Webview-WebView2-2F8FD8?style=flat&labelColor=0B4F80)](https://developer.microsoft.com/microsoft-edge/webview2/)
-[![Installer: PowerShell 5.1+](https://img.shields.io/badge/Installer-PowerShell%205.1%2B-5391FE?style=flat&labelColor=1E3F73)](scripts/install.ps1)
-[![Secrets: Credential Manager](https://img.shields.io/badge/Secrets-Credential%20Manager-6B6B6B?style=flat&labelColor=2B2B2B)](https://crates.io/crates/keyring)
-[![Privacy: local-first](https://img.shields.io/badge/Privacy-local--first-8957E5?style=flat&labelColor=4A1F7A)](#privacy)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-D22128?style=flat&labelColor=8A1A1A&logo=apache&logoColor=white)](LICENSE)
-[![Installs as: CLI | desktop app](https://img.shields.io/badge/Installs%20as-CLI%20%7C%20desktop%20app-E8A33D?style=flat&labelColor=8A4B0F)](#installation-windows)
 
 <br>
 
-[Features](#features) ·
 [Installation](#installation-windows) ·
+[Features](#features) ·
 [Usage](#usage) ·
 [Configuration](#configuration) ·
 [Architecture](#architecture) ·
@@ -49,62 +35,6 @@ Built by [Jimuelle Patron](https://github.com/Jimuelle07)
 [Author](#author)
 
 </div>
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Installation (Windows)](#installation-windows)
-- [Build from Source](#build-from-source)
-- [Usage](#usage)
-  - [Keyboard Shortcuts](#keyboard-shortcuts)
-  - [Query Syntax](#query-syntax)
-  - [Command-Line Interface](#command-line-interface)
-  - [Settings Panel](#settings-panel)
-- [Privacy](#privacy)
-- [Jev Smart Routing (Optional)](#jev-smart-routing-optional)
-- [Configuration](#configuration)
-- [Indexing Details](#indexing-details)
-- [Architecture](#architecture)
-- [FAQ](#faq)
-- [Author](#author)
-- [License](#license)
-
----
-
-## Features
-
-| Feature | Details |
-|---|---|
-| **Same-name files, disambiguated** | Files that share a name (two `README.md`, three `todo.txt`) are shown with their full relative path plus size, modification date and type. |
-| **Local by default** | Files are embedded on-device with [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) (300M params, 4-bit ONNX, ~197 MB). No file data leaves the machine unless you opt into the Jev router. |
-| **Fast** | Rust backend with brute-force cosine search over an in-memory index; target p95 < 100 ms per warm query. |
-| **Lightweight** | One Tauri binary + one model folder. No Python, no server, no GPU. Plain TypeScript UI (no framework). |
-| **Lazy model loading** | The model loads on the first semantic query and unloads after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds. Grep and glob never load it. |
-| **CPU-only inference** | Measured on an RTX 4050 Laptop + i5-13420H, the DirectML GPU path was ~13× slower (p95 836–1072 ms vs 76–80 ms on CPU, uncached `saan bench fixtures/eval.json`), so the GPU option was removed. |
-| **Multi-folder indexing** | Index any number of root folders in the background with live progress (done/total, ETA, current file) and Start/Cancel. Partial indexes are saved as you go; restarting **resumes** and reuses unchanged files. |
-| **Three modes, one box** | A local router picks semantic, grep or glob from the query; explicit prefixes override it. |
-| **Optional typed decisions** | [Jev](https://docs.typesafe.ai/api) (TypeSafe AI System One) can route ambiguous queries and pick between near-duplicates. Off by default, with three privacy levels. |
-| **Settings panel** | Four themes, folder list, max file size, index speed, Jev key (stored in Windows Credential Manager) and privacy level. |
-| **Global hotkey** | `Ctrl+Shift+Space` toggles the launcher from anywhere. |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Core engine | [Rust](https://www.rust-lang.org/) (`saan-core`) — indexing, routing, semantic search, grep, glob |
-| Embeddings | [EmbeddingGemma 300M](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) via [ONNX Runtime](https://onnxruntime.ai/) ([`ort`](https://github.com/pykeio/ort)) and [Hugging Face `tokenizers`](https://github.com/huggingface/tokenizers) |
-| File walking & matching | [`ignore`](https://crates.io/crates/ignore), [`globset`](https://crates.io/crates/globset), [`regex`](https://crates.io/crates/regex) |
-| PDF text extraction | [`pdf-extract`](https://crates.io/crates/pdf-extract) |
-| Desktop app | [Tauri 2](https://tauri.app/) (`saan-app`) with dialog, global-shortcut, opener and single-instance plugins |
-| Frontend | [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vite.dev/), no UI framework |
-| CLI | [`clap`](https://crates.io/crates/clap) (`saan`) |
-| Secret storage | [`keyring`](https://crates.io/crates/keyring) → Windows Credential Manager |
-| HTTP (optional Jev) | [`ureq`](https://crates.io/crates/ureq) with rustls |
 
 ---
 
@@ -222,6 +152,40 @@ cargo tauri build --debug
 The window is hidden at launch; press **Ctrl+Shift+Space** to toggle it. On first
 run, enter a folder to index (or set `SAAN_ROOT` to index one at startup);
 afterwards manage folders from the settings panel.
+
+---
+
+## Features
+
+| Feature | Details |
+|---|---|
+| **Same-name files, disambiguated** | Files that share a name (two `README.md`, three `todo.txt`) are shown with their full relative path plus size, modification date and type. |
+| **Local by default** | Files are embedded on-device with [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) (300M params, 4-bit ONNX, ~197 MB). No file data leaves the machine unless you opt into the Jev router. |
+| **Fast** | Rust backend with brute-force cosine search over an in-memory index; target p95 < 100 ms per warm query. |
+| **Lightweight** | One Tauri binary + one model folder. No Python, no server, no GPU. Plain TypeScript UI (no framework). |
+| **Lazy model loading** | The model loads on the first semantic query and unloads after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds. Grep and glob never load it. |
+| **CPU-only inference** | Measured on an RTX 4050 Laptop + i5-13420H, the DirectML GPU path was ~13× slower (p95 836–1072 ms vs 76–80 ms on CPU, uncached `saan bench fixtures/eval.json`), so the GPU option was removed. |
+| **Multi-folder indexing** | Index any number of root folders in the background with live progress (done/total, ETA, current file) and Start/Cancel. Partial indexes are saved as you go; restarting **resumes** and reuses unchanged files. |
+| **Three modes, one box** | A local router picks semantic, grep or glob from the query; explicit prefixes override it. |
+| **Optional typed decisions** | [Jev](https://docs.typesafe.ai/api) (TypeSafe AI System One) can route ambiguous queries and pick between near-duplicates. Off by default, with three privacy levels. |
+| **Settings panel** | Four themes, folder list, max file size, index speed, Jev key (stored in Windows Credential Manager) and privacy level. |
+| **Global hotkey** | `Ctrl+Shift+Space` toggles the launcher from anywhere. |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Core engine | [Rust](https://www.rust-lang.org/) (`saan-core`) — indexing, routing, semantic search, grep, glob |
+| Embeddings | [EmbeddingGemma 300M](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) via [ONNX Runtime](https://onnxruntime.ai/) ([`ort`](https://github.com/pykeio/ort)) and [Hugging Face `tokenizers`](https://github.com/huggingface/tokenizers) |
+| File walking & matching | [`ignore`](https://crates.io/crates/ignore), [`globset`](https://crates.io/crates/globset), [`regex`](https://crates.io/crates/regex) |
+| PDF text extraction | [`pdf-extract`](https://crates.io/crates/pdf-extract) |
+| Desktop app | [Tauri 2](https://tauri.app/) (`saan-app`) with dialog, global-shortcut, opener and single-instance plugins |
+| Frontend | [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vite.dev/), no UI framework |
+| CLI | [`clap`](https://crates.io/crates/clap) (`saan`) |
+| Secret storage | [`keyring`](https://crates.io/crates/keyring) → Windows Credential Manager |
+| HTTP (optional Jev) | [`ureq`](https://crates.io/crates/ureq) with rustls |
 
 ---
 
