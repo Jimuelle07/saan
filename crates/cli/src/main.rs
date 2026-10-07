@@ -28,7 +28,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Download EmbeddingGemma (ONNX, int8) into ./models.
+    /// Download EmbeddingGemma (ONNX, 4-bit q4) into ./models.
     FetchModel,
     /// Embed every supported file under one or more ROOT folders (unchanged files are reused).
     Index {

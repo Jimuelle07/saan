@@ -3,7 +3,12 @@ name = "saan-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "saan desktop launcher"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "saan desktop launcher: private, local AI file search for Windows"
 
 [[bin]]
 name = "saan-app"

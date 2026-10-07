@@ -6,6 +6,12 @@ members = ["crates/core", "crates/cli", "src-tauri"]
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+authors = ["Jimuelle Patron <patronjimuelle26@gmail.com>"]
+repository = "https://github.com/Jimuelle07/saan"
+homepage = "https://github.com/Jimuelle07/saan"
+readme = "README.md"
+keywords = ["file-search", "semantic-search", "launcher", "embeddings", "privacy"]
+categories = ["command-line-utilities", "filesystem", "text-processing"]
 
 [workspace.dependencies]
 saan-core = { path = "crates/core" }

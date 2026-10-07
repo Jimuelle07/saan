@@ -2,6 +2,29 @@
   "name": "saan",
   "private": true,
   "version": "0.1.0",
+  "description": "saan: private, local AI file search launcher for Windows with semantic search, grep and glob.",
+  "author": "Jimuelle Patron <patronjimuelle26@gmail.com>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/Jimuelle07/saan#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jimuelle07/saan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Jimuelle07/saan/issues"
+  },
+  "keywords": [
+    "file-search",
+    "semantic-search",
+    "local-search",
+    "file-launcher",
+    "tauri",
+    "rust",
+    "embeddinggemma",
+    "onnx",
+    "privacy",
+    "windows"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

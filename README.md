@@ -1,11 +1,67 @@
-# saan
+<div align="center">
+
+# saan — Private, Local AI File Search for Windows
+
+**Find any file by describing it.** saan is a privacy-first desktop file launcher
+with on-device semantic search, regex grep and glob matching in one search box.
+
+[![Rust](https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
+[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-CPU-005CED?style=flat-square&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
+[![EmbeddingGemma](https://img.shields.io/badge/EmbeddingGemma-300M-4285F4?style=flat-square&logo=google&logoColor=white)](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Tokenizers-FFD21E?style=flat-square&logo=huggingface&logoColor=black)](https://github.com/huggingface/tokenizers)
+
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](#installation-windows)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-D22128?style=flat-square&logo=apache&logoColor=white)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-0.1.0-2EA44F?style=flat-square)](Cargo.toml)
+[![Privacy: Local-first](https://img.shields.io/badge/Privacy-Local--first-6E40C9?style=flat-square)](#privacy)
+[![Author: Jimuelle Patron](https://img.shields.io/badge/Author-Jimuelle_Patron-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Jimuelle07)
+
+[Features](#features) ·
+[Installation](#installation-windows) ·
+[Usage](#usage) ·
+[Configuration](#configuration) ·
+[Architecture](#architecture) ·
+[FAQ](#faq) ·
+[Author](#author)
+
+</div>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Installation (Windows)](#installation-windows)
+- [Build from Source](#build-from-source)
+- [Usage](#usage)
+  - [Keyboard Shortcuts](#keyboard-shortcuts)
+  - [Query Syntax](#query-syntax)
+  - [Command-Line Interface](#command-line-interface)
+  - [Settings Panel](#settings-panel)
+- [Privacy](#privacy)
+- [Jev Smart Routing (Optional)](#jev-smart-routing-optional)
+- [Configuration](#configuration)
+- [Indexing Details](#indexing-details)
+- [Architecture](#architecture)
+- [FAQ](#faq)
+- [Author](#author)
+- [License](#license)
+
+---
+
+## Overview
 
 *saan* is Filipino for **"where?"** — the question you ask when you're looking
 for a file.
 
-saan is a privacy-first, local file launcher. Instead of slowly guessing exact
-strings in a file explorer, you describe what you want and it finds the file,
-using one of three search modes:
+saan is an **open-source, local file search launcher** created by
+**Jimuelle Patron**. Instead of guessing exact file names in File Explorer, you
+type what you remember and saan finds the file using one of three search modes:
 
 | Mode | Use when | Example query |
 |---|---|---|
@@ -14,75 +70,97 @@ using one of three search modes:
 | **Glob** | You remember the *name or path shape* | `glob: **/*.pdf` · `meeting-notes.md` |
 
 Files that share a name (two `README.md`, three `todo.txt`) are always shown
-with their full, distinct relative path so you can tell them apart, together
-with their size, modification date and type, so same-name files are easy to
-distinguish at a glance.
+with their full, distinct relative path plus size, modification date and type,
+so same-name files are easy to tell apart at a glance.
+
+---
 
 ## Features
 
-- **Local by default.** Files are embedded on-device with
-  [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX)
-  (300M params, 4-bit ONNX, ~197 MB). No file data leaves the machine unless you opt into
-  the Jev router.
-- **Fast.** Rust backend, brute-force cosine search over an in-memory index,
-  target p95 < 100 ms per warm query.
-- **Lightweight.** One Tauri binary + one model folder. No Python, no server, no
-  GPU required. Plain TypeScript UI (no framework). The ~197 MB model is **not**
-  loaded at startup: the engine loads it lazily on the first semantic query and
-  drops it again after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds, so an
-  idle launcher stays small. Grep and glob queries never load the model.
-- **CPU-only inference.** saan embeds on the CPU execution provider: measured on
-  an RTX 4050 Laptop + i5-13420H, the DirectML GPU path was ~13× slower (p95
-  836–1072 ms vs 76–80 ms CPU, uncached `saan bench fixtures/eval.json`), so the
-  GPU option was removed entirely.
-- **Index all your folders.** Pick any number of root folders; indexing runs in
-  the background with live progress (done/total, ETA, current file) and
-  Start/Cancel controls. Long runs save a partial index as they go, so search
-  works while indexing continues, and starting again **resumes** — unchanged
-  files are reused, not re-embedded. Files larger than the max file size
-  (default 10 MB) are hidden from semantic, grep and glob results everywhere,
-  and heavy/system folders (`node_modules`, `target`, `.git`, `Windows`,
-  `Program Files`, `$Recycle.Bin`, …) are never walked.
-- **Settings panel.** Gear button in the search bar (or `Ctrl+,`): four themes
-  (blue, violet, green, orange — accent **and** text colours follow the theme),
-  folder list, max file size, index speed, Jev key (stored in the Windows
-  Credential Manager, never on disk) and privacy levels.
-- **Three modes, one box.** A local router picks semantic vs grep vs glob from
-  the query, with explicit prefixes to override it.
-- **Optional typed decisions.** [Jev](https://docs.typesafe.ai/api) (TypeSafe AI
-  System One) can choose the search mode for ambiguous queries and pick between
-  near-duplicate candidates. Off by default; three privacy levels control what
-  is sent.
-- **Global hotkey.** `Ctrl+Shift+Space` toggles the launcher; type, hit Enter.
+| | Feature | Details |
+|---|---|---|
+| 🔒 | **Local by default** | Files are embedded on-device with [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) (300M params, 4-bit ONNX, ~197 MB). No file data leaves the machine unless you opt into the Jev router. |
+| ⚡ | **Fast** | Rust backend with brute-force cosine search over an in-memory index; target p95 < 100 ms per warm query. |
+| 🪶 | **Lightweight** | One Tauri binary + one model folder. No Python, no server, no GPU. Plain TypeScript UI (no framework). |
+| 💤 | **Lazy model loading** | The model loads on the first semantic query and unloads after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds. Grep and glob never load it. |
+| 🧠 | **CPU-only inference** | Measured on an RTX 4050 Laptop + i5-13420H, the DirectML GPU path was ~13× slower (p95 836–1072 ms vs 76–80 ms on CPU, uncached `saan bench fixtures/eval.json`), so the GPU option was removed. |
+| 📁 | **Multi-folder indexing** | Index any number of root folders in the background with live progress (done/total, ETA, current file) and Start/Cancel. Partial indexes are saved as you go; restarting **resumes** and reuses unchanged files. |
+| 🧭 | **Three modes, one box** | A local router picks semantic, grep or glob from the query; explicit prefixes override it. |
+| 🤖 | **Optional typed decisions** | [Jev](https://docs.typesafe.ai/api) (TypeSafe AI System One) can route ambiguous queries and pick between near-duplicates. Off by default, with three privacy levels. |
+| 🎨 | **Settings panel** | Four themes, folder list, max file size, index speed, Jev key (stored in Windows Credential Manager) and privacy level. |
+| ⌨️ | **Global hotkey** | `Ctrl+Shift+Space` toggles the launcher from anywhere. |
 
-## Install (Windows)
+---
 
-PowerShell 5+. Builds the desktop app with `npm run tauri build`, which embeds the
-frontend; a plain `cargo build -p saan-app` would point the window at the dev
-server instead. It also builds the CLI with cargo. It stops any running launcher,
-copies `saan.exe` and `saan-app.exe` into `%LOCALAPPDATA%\saan\bin`, and copies or
-fetches the model into `%LOCALAPPDATA%\saan\models\embeddinggemma-300m`. Finally it
-adds that `bin` folder to your **user** `PATH`, keeping `%VAR%` entries and the
-registry value type unchanged:
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Core engine | [Rust](https://www.rust-lang.org/) (`saan-core`) — indexing, routing, semantic search, grep, glob |
+| Embeddings | [EmbeddingGemma 300M](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX) via [ONNX Runtime](https://onnxruntime.ai/) ([`ort`](https://github.com/pykeio/ort)) and [Hugging Face `tokenizers`](https://github.com/huggingface/tokenizers) |
+| File walking & matching | [`ignore`](https://crates.io/crates/ignore), [`globset`](https://crates.io/crates/globset), [`regex`](https://crates.io/crates/regex) |
+| PDF text extraction | [`pdf-extract`](https://crates.io/crates/pdf-extract) |
+| Desktop app | [Tauri 2](https://tauri.app/) (`saan-app`) with dialog, global-shortcut, opener and single-instance plugins |
+| Frontend | [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vite.dev/), no UI framework |
+| CLI | [`clap`](https://crates.io/crates/clap) (`saan`) |
+| Secret storage | [`keyring`](https://crates.io/crates/keyring) → Windows Credential Manager |
+| HTTP (optional Jev) | [`ureq`](https://crates.io/crates/ureq) with rustls |
+
+---
+
+## Installation (Windows)
+
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| Windows 10/11 | The installer, hotkey and Credential Manager key storage target Windows. |
+| PowerShell 5.1+ | Required by `scripts/install.ps1`. |
+| [Rust toolchain](https://rustup.rs/) (MSVC) | Install via rustup with the default `x86_64-pc-windows-msvc` toolchain. |
+| [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) | "Desktop development with C++" workload; needed by the Rust MSVC toolchain. |
+| [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) | Preinstalled on Windows 11 and current Windows 10; install it if missing. |
+| [Node.js](https://nodejs.org/) | Builds the TypeScript frontend via npm. |
+
+See Tauri's [Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows)
+for details.
+
+### Install
 
 ```powershell
+git clone https://github.com/Jimuelle07/saan.git
+cd saan
 powershell -ExecutionPolicy Bypass -File scripts/install.ps1
 ```
 
-Then open a **new** terminal and type:
+The installer:
+
+1. Builds the desktop app with `npm run tauri build` (which embeds the frontend —
+   a plain `cargo build -p saan-app` would point the window at the dev server)
+   and the CLI with cargo.
+2. Stops any running launcher and copies `saan.exe` and `saan-app.exe` into
+   `%LOCALAPPDATA%\saan\bin`.
+3. Copies or fetches the model into `%LOCALAPPDATA%\saan\models\embeddinggemma-300m`.
+4. Adds that `bin` folder to your **user** `PATH`, keeping `%VAR%` entries and
+   the registry value type unchanged.
+
+Then open a **new** terminal and run:
 
 ```sh
 saan
 ```
 
-With **no subcommand**, `saan` opens the desktop launcher. It spawns
+With **no subcommand**, `saan` opens the desktop launcher: it spawns
 `saan-app.exe` (next to `saan.exe`, or `$SAAN_APP`) detached with `SAAN_SHOW=1`,
-then exits. Before that it hands its foreground right to the launcher, so the
-window comes up focused rather than behind the terminal. The window appears once
-the page has loaded. The app is single-instance: running `saan` again focuses
-the existing window instead of starting a second process.
+hands over foreground rights so the window comes up focused, then exits. The
+app is single-instance — running `saan` again focuses the existing window.
+
+<details>
+<summary><b>Installer options (custom location, skip rebuild, uninstall, purge)</b></summary>
 
 ```powershell
+# Install somewhere other than %LOCALAPPDATA%\saan:
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Prefix "D:\Apps\saan"
+
 # Reuse the existing target\release binaries (no rebuild):
 powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -SkipBuild
 
@@ -93,9 +171,13 @@ powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Uninstall
 powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Uninstall -Purge
 ```
 
-## Quick start (from source)
+</details>
 
-Requires the Rust toolchain and Node.js.
+---
+
+## Build from Source
+
+### CLI quick start
 
 ```sh
 # 1. Download the EmbeddingGemma model into ./models (gitignored).
@@ -110,26 +192,20 @@ cargo run --release -p saan-cli -- search "notes about the japan trip"
 cargo run --release -p saan-cli -- search --json -k 5 "grep: fn main"
 ```
 
-Other CLI commands: `grep <pattern>` and `glob <pattern>` take `--root <dir>`
-(repeatable, default `.`) plus `--max-file-mb <n>` (default 10); `eval <file>`
-(top-k hit rate) and `bench <file>` (warm p95 latency).
-Use `--index <dir>` to point at a different index (default `$SAAN_INDEX_DIR` or
-`./.saan/index`). Run with no subcommand (`cargo run --release -p saan-cli`) to
-open the desktop launcher from `target/release/saan-app.exe` (use `SAAN_APP` to
-point elsewhere).
-
 ### Desktop app
 
 ```sh
 npm install
 
-# Primary: Tauri CLI from devDependencies, run via npm scripts.
+# Tauri CLI from devDependencies, run via npm scripts:
 npm run tauri dev
 npm run tauri build -- --debug
 ```
 
-Alternative — the `.tools`-installed `cargo tauri` (note: `cargo tauri` needs
-`.tools/bin` on `PATH`):
+<details>
+<summary><b>Alternative: project-local <code>cargo tauri</code></b></summary>
+
+`cargo tauri` needs `.tools/bin` on `PATH`:
 
 ```sh
 # tauri CLI installed project-locally into .tools (no global install needed)
@@ -141,32 +217,28 @@ cargo tauri dev
 cargo tauri build --debug
 ```
 
+</details>
+
 The window is hidden at launch; press **Ctrl+Shift+Space** to toggle it. On first
 run, enter a folder to index (or set `SAAN_ROOT` to index one at startup);
 afterwards manage folders from the settings panel.
 
-### Settings
+---
 
-Press the gear in the search bar (or `Ctrl+,`) to open settings; `Esc` closes
-settings first, before hiding the window.
+## Usage
 
-- **Appearance** — four themes: blue, violet, green, orange. Accent **and** text
-  colours follow the selection.
-- **Folders** — the indexed roots: remove one, "Add folder…" (native picker), or
-  one-click add of Documents/Desktop/Downloads.
-- **Max file size** — files larger than this (MB, default 10) are hidden from
-  semantic, grep and glob results everywhere.
-- **Index speed** — `background` (2 threads) or `fast` (all cores).
-- **Index** — Start/Cancel with a progress bar, done/total, ETA and the current
-  file. Long runs save a partial index every 200 embedded files so search works
-  during the run; starting again resumes by reusing unchanged files.
-- **Jev** — save or remove the API key; it is stored in the **Windows
-  Credential Manager** (service `saan`, user `jev-api-key`), never in
-  `config.json` or logs, and the `JEV_API_KEY` env var overrides it when set.
-  Plus the enable toggle and privacy level A/B/C with one-line descriptions
-  (Jev "adds ~0.5 s to ambiguous searches"; level A sends only the query).
+### Keyboard Shortcuts
 
-## Query syntax
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+Space` | Show / hide the launcher (global) |
+| `↑` / `↓` | Move the selection |
+| `Enter` | Open the selected file |
+| `Ctrl+Enter` | Reveal the selected file in File Explorer |
+| `Ctrl+,` | Open / close settings |
+| `Esc` | Close settings, otherwise hide the window |
+
+### Query Syntax
 
 | Syntax | Mode | What it does |
 |---|---|---|
@@ -176,22 +248,66 @@ settings first, before hiding the window.
 | `/regex/` | Grep | Regex search inside files (leading and trailing `/`). |
 | *(no prefix)* | Auto | Local heuristics decide; see below. |
 
-Local heuristics (in order): a single token containing `*`, `?` or `[` → glob; a
-single token that looks like a file name (`stem.ext`) or contains `/` (not
-leading) → glob; text containing `( ) { } ; = < >` or `::` → grep (escaped
-literal); a lone word → semantic (low confidence, Jev may reroute); otherwise a
-multi-word phrase → semantic. When an auto-routed grep/glob finds nothing, the
-search falls back to semantic over the raw query.
+**Auto-routing heuristics** (in order):
 
-## Jev (optional)
+1. A single token containing `*`, `?` or `[` → **glob**.
+2. A single token that looks like a file name (`stem.ext`) or contains `/` (not leading) → **glob**.
+3. Text containing `( ) { } ; = < >` or `::` → **grep** (escaped literal).
+4. A lone word → **semantic** (low confidence; Jev may reroute).
+5. Otherwise, a multi-word phrase → **semantic**.
 
-Jev is off by default. Turn it on either from the settings panel — save the API
-key there (stored in the **Windows Credential Manager**, service `saan`, user
-`jev-api-key`; never written to `config.json` or logs) and flip the enable
-toggle — or through the environment: when **both** `SAAN_JEV` is
-`on`/`1`/`true` and `JEV_API_KEY` are set, the environment (and its key)
-overrides the saved settings. Requests go to `POST {base}/v1/systemone` with a
-2500 ms timeout.
+When an auto-routed grep/glob finds nothing, saan falls back to semantic search
+over the raw query.
+
+### Command-Line Interface
+
+| Command | Description |
+|---|---|
+| `saan` | Open the desktop launcher. |
+| `saan fetch-model` | Download EmbeddingGemma into `./models`. |
+| `saan index <root>...` | Embed supported files under one or more roots (unchanged files are reused). `--max-file-mb <n>` caps file size. |
+| `saan search <query>` | Routed search. `-k <n>` result count, `--json` for machine output. |
+| `saan grep <pattern>` | Regex search inside files. `--root <dir>` (repeatable, default `.`), `--max-file-mb <n>` (default 10). |
+| `saan glob <pattern>` | File name / path pattern search. Same `--root` and `--max-file-mb` options. |
+| `saan eval <file>` | Top-k hit rate over `{query, expected}` pairs. |
+| `saan bench <file>` | Warm query latency (p95) over the eval queries. |
+
+Use `--index <dir>` to point at a different index (default `$SAAN_INDEX_DIR` or
+`./.saan/index`). From source, `cargo run --release -p saan-cli` with no
+subcommand opens `target/release/saan-app.exe` (override with `SAAN_APP`).
+
+### Settings Panel
+
+Open with the gear in the search bar or `Ctrl+,`.
+
+| Section | Options |
+|---|---|
+| **Appearance** | Four themes — blue, violet, green, orange. Accent **and** text colours follow the selection. |
+| **Folders** | Indexed roots: remove one, "Add folder…" (native picker), or one-click add of Documents/Desktop/Downloads. |
+| **Max file size** | Files larger than this (MB, default 10) are hidden from semantic, grep and glob results everywhere. |
+| **Index speed** | `background` (2 threads) or `fast` (all cores). |
+| **Index** | Start/Cancel with progress bar, done/total, ETA and current file. A partial index is saved every 200 embedded files so search works during the run; starting again resumes. |
+| **Jev** | Save or remove the API key, enable toggle, and privacy level A/B/C. Jev adds ~0.5 s to ambiguous searches. |
+
+---
+
+## Privacy
+
+- File contents are embedded **on your machine**; the index stays local.
+- The Jev router is **off by default**. When enabled, privacy level A (default)
+  sends only the query text.
+- The Jev API key is stored in the **Windows Credential Manager** (service
+  `saan`, user `jev-api-key`) — never in `config.json` or logs.
+- Absolute paths, file contents beyond the snippet, and index data are never sent.
+
+---
+
+## Jev Smart Routing (Optional)
+
+Turn Jev on either from the settings panel (save the key, flip the toggle) or
+through the environment: when **both** `SAAN_JEV` is `on`/`1`/`true` and
+`JEV_API_KEY` are set, the environment (and its key) overrides the saved
+settings. Requests go to `POST {base}/v1/systemone` with a 2500 ms timeout.
 
 | Privacy level | `SAAN_JEV_PRIVACY` | Routing request | Candidate pick request |
 |---|---|---|---|
@@ -199,9 +315,14 @@ overrides the saved settings. Requests go to `POST {base}/v1/systemone` with a
 | `b` | `b` / `paths` | query text | query + candidate relative paths |
 | `c` | `c` / `snippets` | query text | query + candidate relative paths + short snippets |
 
-The level is also choosable in the settings panel (default `a`); the env
-variable above applies when the environment path is active. Absolute paths, file
-contents beyond the snippet, and index data are never sent.
+The level is also selectable in the settings panel (default `a`); the env
+variable applies when the environment path is active.
+
+---
+
+## Configuration
+
+### Jev variables
 
 | Variable | Purpose |
 |---|---|
@@ -211,7 +332,7 @@ contents beyond the snippet, and index data are never sent.
 | `SAAN_JEV_URL` | API base URL (default `https://api.typesafe.ai`). |
 | `SAAN_JEV_MODEL` | Model name (default `jev-latest`). |
 
-Other environment variables:
+### General variables
 
 | Variable | Purpose |
 |---|---|
@@ -222,21 +343,96 @@ Other environment variables:
 | `SAAN_APP` | Path to `saan-app.exe` for `saan` with no subcommand (default: next to `saan.exe`). |
 | `SAAN_IDLE_UNLOAD_SECS` | Seconds of no semantic use before the app unloads the model (default 300; `0` keeps it loaded). |
 
-Search results carry metadata for every hit: `size` (bytes), `modified` (Unix
-seconds, `0` if unknown) and `ext` (lowercase extension without the dot, empty
-if none), alongside `rel`, `path`, `name`, `score`, `line`, `snippet` and
-`same_name`. Indexing skips `node_modules`, `target`, `__pycache__`, `.venv`,
-`venv`, `.git`, `$Recycle.Bin`, `System Volume Information`, `Windows`,
-`Program Files`, `Program Files (x86)`, `ProgramData` and `AppData`
-directories, on top of the usual gitignore/hidden-file rules, and files larger
-than the max file size (default 10 MB) are hidden from semantic, grep and glob
-results everywhere.
+---
 
-See `docs/system-design` for the full architecture and the verification log.
+## Indexing Details
+
+**Semantically indexed files:** PDFs plus text, document and source-code
+extensions — `md`, `txt`, `rst`, `org`, `tex`, `csv`, `json`, `yaml`, `toml`,
+`xml`, `html`, `css`, `js`, `ts`, `py`, `rs`, `go`, `java`, `kt`, `c`, `cpp`,
+`cs`, `rb`, `php`, `swift`, `sh`, `ps1`, `sql`, `lua`, `dart`, `vue`, `svelte`,
+`log` and more. Other files are not embedded but remain grep/glob-searchable.
+
+**Skipped directories:** `node_modules`, `target`, `__pycache__`, `.venv`,
+`venv`, `.git`, `$Recycle.Bin`, `System Volume Information`, `Windows`,
+`Program Files`, `Program Files (x86)`, `ProgramData` and `AppData`, on top of
+the usual gitignore/hidden-file rules. Files larger than the max file size
+(default 10 MB) are hidden from semantic, grep and glob results everywhere.
+
+**Result metadata:** every hit carries `rel`, `path`, `name`, `score`, `line`,
+`snippet`, `same_name`, `size` (bytes), `modified` (Unix seconds, `0` if
+unknown) and `ext` (lowercase extension without the dot, empty if none).
+
+---
+
+## Architecture
+
+```text
+saan/
+├── crates/
+│   ├── core/        # saan-core: indexing, embeddings, router, semantic search, grep, glob, Jev client
+│   └── cli/         # saan-cli: the `saan` command (index, search, grep, glob, eval, bench)
+├── src-tauri/       # saan-app: Tauri 2 desktop launcher
+├── src/             # TypeScript frontend (no framework)
+├── scripts/         # install.ps1 Windows installer
+└── docs/            # idea, spec and system design
+```
+
+See [`docs/system-design`](docs/system-design) for the full architecture and
+verification log, plus [`docs/spec.md`](docs/spec.md) and
+[`docs/idea.md`](docs/idea.md).
+
+---
+
+## FAQ
+
+<details>
+<summary><b>Does saan upload my files to the cloud?</b></summary>
+
+No. Embedding and search run locally on the CPU. The only network features are
+the one-time model download (`saan fetch-model`) and the optional, off-by-default
+Jev router, whose data sharing is controlled by the [privacy level](#jev-smart-routing-optional).
+</details>
+
+<details>
+<summary><b>Do I need a GPU?</b></summary>
+
+No. saan is CPU-only by design — on tested hardware the CPU path was ~13× faster
+than DirectML for this workload.
+</details>
+
+<details>
+<summary><b>How is this different from Windows Search or File Explorer?</b></summary>
+
+File Explorer matches names; saan also matches **meaning** (semantic search
+with EmbeddingGemma), **content** (regex grep) and **path patterns** (glob) from
+a single hotkey-driven search box.
+</details>
+
+<details>
+<summary><b>Which platforms are supported?</b></summary>
+
+Windows. The installer, Credential Manager key storage and skipped system
+folders target Windows.
+</details>
+
+---
+
+## Author
+
+**Jimuelle Patron** — creator and maintainer of saan.
+
+- GitHub: [@Jimuelle07](https://github.com/Jimuelle07)
+- Project: [github.com/Jimuelle07/saan](https://github.com/Jimuelle07/saan)
+
+If saan helps you find your files, consider giving the repository a ⭐.
+
+---
 
 ## License
 
-Apache-2.0. See [`LICENSE`](LICENSE).
+Copyright © 2026 Jimuelle Patron. Licensed under the **Apache License 2.0** —
+see [`LICENSE`](LICENSE).
 
 **Model license:** the app code is Apache-2.0, but the EmbeddingGemma weights
 downloaded by `saan fetch-model` (from
@@ -244,3 +440,7 @@ downloaded by `saan fetch-model` (from
 derived from `google/embeddinggemma-300m`) are governed by Google's
 [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and are **not** covered
 by this repository's license; they are not redistributed in the repo.
+
+<sub>Keywords: local file search, semantic file search, AI file finder, desktop
+file launcher, offline search, privacy-first, Windows, Rust, Tauri,
+EmbeddingGemma, ONNX Runtime, grep, glob — by Jimuelle Patron.</sub>
