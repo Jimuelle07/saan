@@ -9,7 +9,7 @@ description = "Local semantic search, grep and glob engine for the saan launcher
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "download-binaries", "copy-dylibs", "tls-rustls"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "download-binaries", "tls-rustls"] }
 ndarray = "0.17"
 tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
 ignore = "0.4"

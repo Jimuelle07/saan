@@ -9,9 +9,10 @@ claim below is grounded in the code; file paths are relative to the repo root.
 | Component | Location | Responsibility |
 |---|---|---|
 | `saan-core` library | `crates/core/src` | Chunking, embedding, extraction, index, router, grep, glob, Jev client, engine. |
-| `saan` CLI | `crates/cli/src/main.rs` | `fetch-model`, `index`, `search`, `grep`, `glob`, `eval`, `bench`. |
+| `saan` CLI | `crates/cli/src/main.rs` | `fetch-model`, `index`, `search`, `grep`, `glob`, `eval`, `bench`; with **no subcommand** it launches the desktop app and exits. |
 | Tauri app | `src-tauri/src/main.rs` | Desktop window + global hotkey, Tauri commands, engine state, Jev wiring. |
-| Frontend | `index.html`, `src/main.ts` | Plain TypeScript launcher UI (debounced search, keyboard nav, folder setup). |
+| Frontend | `index.html`, `src/main.ts` | Plain TypeScript launcher UI (debounced search, keyboard nav, folder setup, result metadata). |
+| Installer | `scripts/install.ps1` | Builds the app with `npm run tauri build` (embeds the frontend) and the CLI with cargo. Stops any running launcher, copies both executables to `%LOCALAPPDATA%\saan\bin`, and copies or fetches the model to `%LOCALAPPDATA%\saan\models`. Puts `bin` on the user `PATH` through the raw registry value, so `%VAR%` entries and REG_EXPAND_SZ survive. `-Uninstall [-Purge]` reverses it. |
 
 ### Core modules (`crates/core/src`)
 
@@ -19,14 +20,14 @@ claim below is grounded in the code; file paths are relative to the repo root.
 |---|---|---|
 | `lib.rs` | `Engine`, `Hit`, `SearchResponse`, `Index`, `Mode`, `Route`, `rel_path` | Re-exports plus `rel_path` (forward slashes, relative to the index root when possible). |
 | `chunk.rs` | `CHUNK_CHARS = 1200`, `OVERLAP_CHARS = 200`, `chunk_ranges` | Byte ranges into extracted text; snaps to a line break in the back half of the window and always to char boundaries. |
-| `embed.rs` | `Embedder`, `find_model_dir`, `doc_prompt`, `MODEL_DIR_NAME`, `MODEL_REPO`, `MODEL_FILES` | EmbeddingGemma-300m via ONNX Runtime, on-device. |
-| `extract.rs` | `walk_files`, `extract_text`, `looks_binary`, `MAX_INDEX_BYTES = 2 MiB` | Walks with the `ignore` crate (respects `.gitignore`/`.ignore` and hidden-file rules); skips files > 2 MiB for embedding; PDFs via `pdf-extract`; binary when the first 8 KiB contain a NUL byte. |
+| `embed.rs` | `Embedder`, `Embedder::load_with_threads`, `find_model_dir`, `doc_prompt`, `MODEL_DIR_NAME`, `MODEL_REPO`, `MODEL_FILES` | EmbeddingGemma-300m via ONNX Runtime, on-device. |
+| `extract.rs` | `walk_files`, `extract_text`, `looks_binary`, `MAX_INDEX_BYTES = 2 MiB` | Walks with the `ignore` crate (respects `.gitignore`/`.ignore` and hidden-file rules) and additionally skips directories named `node_modules`, `target`, `__pycache__`, `.venv`, `venv`; skips files > 2 MiB for embedding; PDFs via `pdf-extract`; binary when the first 8 KiB contain a NUL byte. |
 | `index.rs` | `Index`, `FileEntry`, `ChunkEntry`, `FileScore`, `BuildStats` | On-disk `meta.json` + `vectors.f32`; brute-force cosine search; incremental reuse. |
 | `router.rs` | `Mode`, `Route`, `RouteSource`, `local_route`, `CONFIDENT = 0.75` | Deterministic local query router. |
 | `grep.rs` | `grep`, `GrepHit`, `MAX_LINE_CHARS = 200` | Line-oriented regex search, smart case, ripgrep-style. |
 | `glob.rs` | `glob` | Path pattern matching over the walked file list. |
 | `jev.rs` | `JevClient`, `Privacy`, `Candidate`, `SNIPPET_CHARS = 160` | Optional TypeSafe AI System One decision layer. |
-| `engine.rs` | `Engine::search`, `semantic`, `grep`, `glob`, `mark_same_names` | Ties routing, the three search modes and Jev together. |
+| `engine.rs` | `Engine::new`, `preload`, `release_if_idle`, `model_loaded`, `search`, `semantic`, `grep`, `glob`, `mark_same_names` | Ties routing, the three search modes and Jev together. `new` takes an `Index`, a model **directory** and an optional `JevClient` and does **not** load the model: the `Embedder` is loaded lazily on the first semantic use (or `preload`) into a `Mutex<Option<Arc<Embedder>>>`, and `release_if_idle` drops it after an idle timeout. |
 
 ### CLI commands (`crates/cli/src/main.rs`)
 
@@ -34,16 +35,19 @@ Global option: `--index <dir>` (default `$SAAN_INDEX_DIR` or `./.saan/index`).
 
 | Command | Arguments | Behaviour |
 |---|---|---|
+| *(none)* | — | Launches the desktop app and exits 0. Calls `AllowSetForegroundWindow(ASFW_ANY)` so the launcher (or the running instance) can take focus from the terminal. Then spawns `saan-app[.exe]` found next to the running `saan.exe` (or `$SAAN_APP`) with `SAAN_SHOW=1`, detached on Windows (`DETACHED_PROCESS` + `CREATE_NEW_PROCESS_GROUP`) and with null stdio. Exits 1 with a clear message when the app binary is missing. |
 | `fetch-model` | — | Downloads the files in `MODEL_FILES` from `MODEL_REPO` into `$SAAN_MODEL_DIR` or `./models/<MODEL_DIR_NAME>`, skipping files already present (`.part` temp file then rename). |
 | `index <root>` | — | Builds the index, reusing unchanged files when a previous index loads. |
-| `search <query...>` | `-k <n>` (default 10), `--json` | Routed search; words are joined with spaces. |
+| `search <query...>` | `-k <n>` (default 10), `--json` | Routed search; words are joined with spaces. Builds `Engine::new(index, model_dir, JevClient::from_env())`; the model loads on the first semantic use (grep/glob routes never load it). |
 | `grep <pattern>` | `--root <dir>` (default `.`) | Direct regex search (no routing), prints `rel:line: text`. |
 | `glob <pattern>` | `--root <dir>` (default `.`) | Direct glob search (no routing). |
-| `eval <file>` | `-k <n>` (default 5), `--min <rate>` (default 0.8) | Top-k hit rate over `{query, expected}` cases; exits failure below `--min`. Uses a **local-only** engine (`Engine::new(..., None)`) so results are reproducible. |
-| `bench <file>` | `--runs <n>` (default 5), `--max-ms <ms>` (default 100) | Warm p50/p95/max latency over the eval queries; exits failure if p95 ≥ `--max-ms`. Also local-only. |
+| `eval <file>` | `-k <n>` (default 5), `--min <rate>` (default 0.8) | Top-k hit rate over `{query, expected}` cases; exits failure below `--min`. Uses a **local-only** engine (`Engine::new(index, model_dir, None)`) so results are reproducible. |
+| `bench <file>` | `--runs <n>` (default 5), `--max-ms <ms>` (default 100) | Warm p50/p95/max latency over the eval queries; exits failure if p95 ≥ `--max-ms`. Also local-only, and calls `Engine::preload()` before the warm-up loop so model load time is excluded from the measurement. |
 
 `eval` and `bench` deliberately construct the engine with no `JevClient`, so Jev
-is never consulted during measurement.
+is never consulted during measurement. Both resolve the model directory with
+`find_model_dir()` and report the same "EmbeddingGemma not found" error as the
+other commands when it is missing.
 
 ### Tauri commands (`src-tauri/src/main.rs`)
 
@@ -56,10 +60,21 @@ is never consulted during measurement.
 | `hide_window` | — | Hides the `main` webview window. |
 
 App state is `AppState { engine: RwLock<Option<Engine>>, error: RwLock<Option<String>> }`.
+The app is registered with `tauri-plugin-single-instance` (v2): launching
+`saan-app.exe` again — including the `saan` CLI with no subcommand — hands the
+`SAAN_SHOW` request to the running instance, which shows and focuses its window,
+instead of starting a second process.
+
 On startup the app registers the global shortcut `Ctrl+Shift+Space`; pressing it
 toggles the window. If `SAAN_ROOT` is set it (re)indexes that folder first,
-otherwise it loads the saved index. The window hides on focus loss, and
-`SAAN_SHOW` makes it visible at startup. Window config
+otherwise it loads the saved index. The engine is constructed **without** loading
+the model; it loads on the first semantic query, and the app drops it again with
+`Engine::release_if_idle` after `SAAN_IDLE_UNLOAD_SECS` (default 300) seconds
+without a semantic query, so an idle
+launcher gives the ~197 MB back. The window hides on focus loss, and
+`SAAN_SHOW` makes it visible at startup, after the first page load finishes
+(showing earlier let WebView2 start-up hand focus back to the terminal, and the
+window then hid itself on blur). Window config
 (`src-tauri/tauri.conf.json`): label `main`, 720×480, undecorated, always on
 top, centered, not resizable, skipped from the taskbar, initially hidden.
 
@@ -70,7 +85,9 @@ setup form and status footer. It calls the Tauri commands via
 `@tauri-apps/api/core`'s `invoke`. Searches are debounced 40 ms and guarded by a
 sequence number so a stale response cannot overwrite a newer one. `↑`/`↓` move
 the selection, `Enter` opens, `Ctrl+Enter` reveals, `Escape` hides the window.
-Status is polled every 3 s and on window focus.
+Status is refreshed on window focus (and on a timer while visible). Each result
+row also renders the hit's metadata — `size` (bytes), `modified` (Unix seconds)
+and `ext` — so files that share a name are easy to tell apart.
 
 ## Query data flow
 
@@ -85,10 +102,14 @@ Status is polled every 3 s and on window focus.
    plain string is safe as a regex.
 3. **Dispatch.**
    - `semantic` → `Embedder::embed_query` then `Index::search` (top-k files by
-     best-chunk cosine).
+     best-chunk cosine). The embedder is loaded on first use (cloned `Arc`
+     outside the lock), so grep/glob searches never touch it.
    - `grep` → `grep::grep` with `GREP_HIT_LIMIT = 500`, one row per file (first
      matching line), `score = 1.0`, `line` set.
    - `glob` → `glob::glob`, `score = 1.0`, empty snippet.
+   - Every hit also carries `size` (bytes), `modified` (Unix seconds, 0 when
+     unknown) and `ext` (lowercase, no dot): semantic hits read them from
+     `Index.files[i].size`/`mtime`, grep/glob hits from `std::fs::metadata`.
 4. **Fallback to semantic.** If a *guessed* exact search (mode ≠ `semantic`, and
    `source != Explicit`, i.e. the user did not type a prefix) returns no hits,
    the route is replaced with a semantic search over the raw trimmed input.
@@ -192,6 +213,22 @@ timeout, and model `SAAN_JEV_MODEL` (default `jev-latest`).
 Absolute paths, file contents beyond the snippet, and index data are never sent.
 The route request body contains only the query at every level.
 
+## Distribution and footprint
+
+`saan` ships as two executables — `saan.exe` (CLI) and `saan-app.exe` (Tauri app)
+— plus the model folder. The Windows installer (`scripts/install.ps1`) puts both
+in `%LOCALAPPDATA%\saan\bin` and the model in
+`%LOCALAPPDATA%\saan\models\embeddinggemma-300m`; because that model folder is a
+`models/` ancestor of `bin`, `find_model_dir` resolves it without any environment
+variable. No `DirectML.dll` is copied next to the executables: saan uses the CPU
+execution provider, and ONNX Runtime resolves any DirectML dependency from
+`C:\Windows\System32` (present since Windows 10 1903).
+
+The ~197 MB model is not resident by default: `Engine::new` takes a directory and
+loads the `Embedder` lazily on the first semantic query, so an idle launcher is
+just the Tauri process (+ WebView2). `SAAN_IDLE_UNLOAD_SECS` (default 300) makes
+the app drop the model again when no semantic query has run for that long.
+
 ## Environment variables
 
 | Variable | Read by | Purpose |
@@ -200,7 +237,9 @@ The route request body contains only the query at every level.
 | `SAAN_INDEX_DIR` | CLI `index_dir` | Index folder when `--index` is not given. |
 | `SAAN_THREADS` | `Embedder::load` | ONNX Runtime intra-op threads (default `min(cores, 8)`). |
 | `SAAN_ROOT` | Tauri `startup` | Folder to (re)index at launch. |
-| `SAAN_SHOW` | Tauri `setup` | Show the window immediately at launch (any value). |
+| `SAAN_SHOW` | Tauri `setup` / `on_page_load` | Show the window once the page has loaded (any value). The CLI sets `SAAN_SHOW=1` when it spawns the app. |
+| `SAAN_APP` | CLI (no subcommand) | Path to the desktop app binary; default is `saan-app[.exe]` next to the running `saan` executable. |
+| `SAAN_IDLE_UNLOAD_SECS` | Tauri idle unload | Seconds without a semantic query, with the window hidden, before the app drops the model (default 300; checked every 30 s). |
 | `SAAN_JEV` | `JevClient::from_env` | Enables Jev when `on`, `1` or `true`. |
 | `JEV_API_KEY` | `JevClient::from_env` | Bearer token; required for Jev. Read from nowhere else. |
 | `SAAN_JEV_PRIVACY` | `JevClient::from_env` | `a`/`query` (default), `b`/`paths`, `c`/`snippets`. |

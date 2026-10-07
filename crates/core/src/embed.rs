@@ -60,19 +60,25 @@ pub struct Embedder {
 }
 
 impl Embedder {
+    /// Load with the default thread count: `$SAAN_THREADS`, else `min(cores, 8)`.
     pub fn load(model_dir: &Path) -> Result<Self> {
-        let tokenizer = Tokenizer::from_file(model_dir.join("tokenizer.json"))
-            .map_err(|e| anyhow!("loading tokenizer: {e}"))?;
         let threads = std::env::var("SAAN_THREADS")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0)
             .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get().min(8)));
+        Self::load_with_threads(model_dir, threads)
+    }
+
+    /// Load with an explicit ONNX Runtime intra-op thread count (`0` acts as 1).
+    pub fn load_with_threads(model_dir: &Path, threads: usize) -> Result<Self> {
+        let tokenizer = Tokenizer::from_file(model_dir.join("tokenizer.json"))
+            .map_err(|e| anyhow!("loading tokenizer: {e}"))?;
         let ort_err = |e: ort::Error<_>| anyhow!("{e}");
         let session = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(ort_err)?
-            .with_intra_threads(threads)
+            .with_intra_threads(threads.max(1))
             .map_err(ort_err)?
             .commit_from_file(model_dir.join("onnx").join(MODEL_FILE))
             .with_context(|| format!("loading ONNX model from {}", model_dir.display()))?;

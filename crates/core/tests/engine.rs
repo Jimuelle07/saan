@@ -5,8 +5,9 @@
 //! Every test needs the EmbeddingGemma model (`models/embeddinggemma-300m`).
 //! When [`saan_core::embed::find_model_dir`] finds nothing the test prints
 //! `skipping: model not found` and passes, so the suite is green on machines
-//! without the (gitignored, ~200 MB) model. `Engine` owns its `Embedder`, so
-//! each test loads the model itself: that is why there are only a handful of
+//! without the (gitignored, ~200 MB) model. Each test builds its index with its
+//! own throwaway `Embedder`; the `Engine` under test loads the model lazily and
+//! is handed only the model directory. That is why there are only a handful of
 //! tests and why each one indexes a fixed subset rather than the whole corpus.
 //!
 //! Tests run with cwd `crates/core`, so `find_model_dir` walks up to the repo's
@@ -64,14 +65,17 @@ fn fresh_subset_root(test: &str) -> Option<PathBuf> {
     Some(root)
 }
 
-/// Index `root` and wrap it in an `Engine` with Jev disabled. Returns the engine
-/// and the canonical temp root (so callers can clean it up), or `None` when the
-/// model is missing.
+/// Index `root` and wrap it in an `Engine` with Jev disabled. The index is built
+/// with a local `Embedder`; the engine only gets the model directory and loads
+/// its own copy on the first semantic query. Returns the engine and the
+/// canonical temp root (so callers can clean it up), or `None` when the model is
+/// missing (the caller has already printed the skip notice).
 fn engine_for(root: &Path) -> Option<(Engine, PathBuf)> {
-    let embedder = embedder_or_skip()?;
+    let model_dir = saan_core::embed::find_model_dir()?;
+    let embedder = Embedder::load(&model_dir).expect("loading embedder");
     let (index, _stats) = Index::build(root, &embedder, None, |_| {}).expect("building index");
     let temp_root = index.root.clone();
-    Some((Engine::new(index, embedder, None), temp_root))
+    Some((Engine::new(index, model_dir, None), temp_root))
 }
 
 #[test]
@@ -131,6 +135,50 @@ fn same_name_files_are_reported_separately() {
     rels.sort_unstable();
     assert_eq!(rels, ["notes/todo.txt", "work/todo.txt"]);
     assert!(response.hits.iter().all(|h| h.name == "todo.txt" && h.same_name));
+    // Glob hits carry filesystem metadata, so same-name rows can be told apart.
+    assert!(
+        response.hits.iter().all(|h| h.ext == "txt" && h.size > 0 && h.modified > 0),
+        "hits: {:?}",
+        response.hits
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn model_loads_lazily_and_unloads_when_idle() {
+    let Some(dir) = fresh_subset_root("lazy") else { return };
+    let Some((engine, temp_root)) = engine_for(&dir) else { return };
+
+    assert!(!engine.model_loaded(), "Engine::new must not load the model");
+
+    // An exact-name search is answered by glob and never needs the model.
+    let globbed = engine.search("todo.txt", 10).expect("searching");
+    assert_eq!(globbed.route.mode, Mode::Glob);
+    assert!(!globbed.hits.is_empty());
+    assert!(!engine.model_loaded(), "glob must not load the model");
+
+    // Meaning needs the model, so the first semantic query loads it.
+    let semantic = engine
+        .search(
+            "how long should bread dough rest in the fridge before baking it in a dutch oven",
+            5,
+        )
+        .expect("searching");
+    assert_eq!(semantic.route.mode, Mode::Semantic);
+    assert_eq!(semantic.hits[0].rel, "recipes/sourdough.md");
+    assert!(engine.model_loaded());
+
+    // Nothing has been searched "recently" with a zero idle window.
+    assert!(engine.release_if_idle(std::time::Duration::ZERO));
+    assert!(!engine.model_loaded());
+    assert!(!engine.release_if_idle(std::time::Duration::ZERO), "already unloaded");
+
+    // Unloading only frees memory: the next semantic query reloads on demand.
+    let again = engine.search("dijkstra shortest path through a weighted graph", 5).expect("searching");
+    assert_eq!(again.route.mode, Mode::Semantic);
+    assert!(!again.hits.is_empty());
+    assert!(engine.model_loaded());
 
     let _ = std::fs::remove_dir_all(&temp_root);
 }

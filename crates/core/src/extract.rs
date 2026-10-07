@@ -5,9 +5,27 @@ use std::path::{Path, PathBuf};
 /// Files larger than this are skipped for embedding (grep still scans them).
 pub const MAX_INDEX_BYTES: u64 = 2 * 1024 * 1024;
 
-/// Walk `root` respecting .gitignore/.ignore and hidden-file rules.
+/// Directory names never walked: dependency/build caches that hold no user code
+/// and would otherwise flood the index and grep results.
+const SKIP_DIRS: &[&str] = &["node_modules", "target", "__pycache__", ".venv", "venv"];
+
+/// Walk `root` respecting .gitignore/.ignore and hidden-file rules, pruning the
+/// `SKIP_DIRS` directories (and everything below them).
 pub fn walk_files(root: &Path) -> Vec<PathBuf> {
-    let mut files: Vec<PathBuf> = ignore::WalkBuilder::new(root)
+    let root_owned = root.to_path_buf();
+    let mut builder = ignore::WalkBuilder::new(root);
+    builder.filter_entry(move |e| {
+        // Never prune the root itself, even if it happens to be named `target`.
+        if e.path() == root_owned.as_path() {
+            return true;
+        }
+        if !e.file_type().is_some_and(|t| t.is_dir()) {
+            return true;
+        }
+        let name = e.file_name();
+        !SKIP_DIRS.iter().any(|d| name == *d)
+    });
+    let mut files: Vec<PathBuf> = builder
         .build()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_some_and(|t| t.is_file()))

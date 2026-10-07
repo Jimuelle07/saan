@@ -14,7 +14,9 @@ using one of three search modes:
 | **Glob** | You remember the *name or path shape* | `glob: **/*.pdf` · `meeting-notes.md` |
 
 Files that share a name (two `README.md`, three `todo.txt`) are always shown
-with their full, distinct relative path so you can tell them apart.
+with their full, distinct relative path so you can tell them apart, together
+with their size, modification date and type, so same-name files are easy to
+distinguish at a glance.
 
 ## Features
 
@@ -25,7 +27,13 @@ with their full, distinct relative path so you can tell them apart.
 - **Fast.** Rust backend, brute-force cosine search over an in-memory index,
   target p95 < 100 ms per warm query.
 - **Lightweight.** One Tauri binary + one model folder. No Python, no server, no
-  GPU required. Plain TypeScript UI (no framework).
+  GPU required. Plain TypeScript UI (no framework). The ~197 MB model is **not**
+  loaded at startup: the engine loads it lazily on the first semantic query and
+  drops it again after `SAAN_IDLE_UNLOAD_SECS` (default 300) idle seconds, so an
+  idle launcher stays small. Grep and glob queries never load the model. saan
+  runs on the CPU execution provider and ships **no** `DirectML.dll`: ONNX
+  Runtime resolves it from `C:\Windows\System32`, which has carried a compatible
+  copy since Windows 10 1903.
 - **Three modes, one box.** A local router picks semantic vs grep vs glob from
   the query, with explicit prefixes to override it.
 - **Optional typed decisions.** [Jev](https://docs.typesafe.ai/api) (TypeSafe AI
@@ -34,7 +42,45 @@ with their full, distinct relative path so you can tell them apart.
   is sent.
 - **Global hotkey.** `Ctrl+Shift+Space` toggles the launcher; type, hit Enter.
 
-## Quick start
+## Install (Windows)
+
+PowerShell 5+. Builds the desktop app with `npm run tauri build`, which embeds the
+frontend; a plain `cargo build -p saan-app` would point the window at the dev
+server instead. It also builds the CLI with cargo. It stops any running launcher,
+copies `saan.exe` and `saan-app.exe` into `%LOCALAPPDATA%\saan\bin`, and copies or
+fetches the model into `%LOCALAPPDATA%\saan\models\embeddinggemma-300m`. Finally it
+adds that `bin` folder to your **user** `PATH`, keeping `%VAR%` entries and the
+registry value type unchanged:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+```
+
+Then open a **new** terminal and type:
+
+```sh
+saan
+```
+
+With **no subcommand**, `saan` opens the desktop launcher. It spawns
+`saan-app.exe` (next to `saan.exe`, or `$SAAN_APP`) detached with `SAAN_SHOW=1`,
+then exits. Before that it hands its foreground right to the launcher, so the
+window comes up focused rather than behind the terminal. The window appears once
+the page has loaded. The app is single-instance: running `saan` again focuses
+the existing window instead of starting a second process.
+
+```powershell
+# Reuse the existing target\release binaries (no rebuild):
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -SkipBuild
+
+# Uninstall: drop bin\ from the user PATH and delete bin\ (keeps models + app data):
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Uninstall
+
+# ...and delete the whole install root, including models and app data:
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1 -Uninstall -Purge
+```
+
+## Quick start (from source)
 
 Requires the Rust toolchain and Node.js.
 
@@ -52,7 +98,9 @@ cargo run --release -p saan-cli -- search --json -k 5 "grep: fn main"
 
 Other CLI commands: `grep <pattern>`, `glob <pattern>`, `eval <file>` (top-k hit
 rate) and `bench <file>` (warm p95 latency); use `--index <dir>` to point at a
-different index (default `$SAAN_INDEX_DIR` or `./.saan/index`).
+different index (default `$SAAN_INDEX_DIR` or `./.saan/index`). Run with no
+subcommand (`cargo run --release -p saan-cli`) to open the desktop launcher from
+`target/release/saan-app.exe` (use `SAAN_APP` to point elsewhere).
 
 ### Desktop app
 
@@ -118,9 +166,22 @@ Absolute paths, file contents beyond the snippet, and index data are never sent.
 | `SAAN_JEV_URL` | API base URL (default `https://api.typesafe.ai`). |
 | `SAAN_JEV_MODEL` | Model name (default `jev-latest`). |
 
-Other environment variables: `SAAN_MODEL_DIR` (model folder),
-`SAAN_INDEX_DIR` (CLI index folder), `SAAN_ROOT` (folder to index at app
-startup), `SAAN_SHOW` (show the window at launch).
+Other environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `SAAN_MODEL_DIR` | Model folder (overrides discovery). |
+| `SAAN_INDEX_DIR` | CLI index folder (same as `--index`). |
+| `SAAN_ROOT` | Folder to (re)index when the app starts. |
+| `SAAN_SHOW` | Show the window at launch; the CLI sets it to `1` when it spawns the app. |
+| `SAAN_APP` | Path to `saan-app.exe` for `saan` with no subcommand (default: next to `saan.exe`). |
+| `SAAN_IDLE_UNLOAD_SECS` | Seconds of no semantic use before the app unloads the model (default 300; `0` keeps it loaded). |
+
+Search results carry metadata for every hit: `size` (bytes), `modified` (Unix
+seconds, `0` if unknown) and `ext` (lowercase extension without the dot, empty
+if none), alongside `rel`, `path`, `name`, `score`, `line`, `snippet` and
+`same_name`. Indexing skips `node_modules`, `target`, `__pycache__`, `.venv` and
+`venv` directories, on top of the usual gitignore/hidden-file rules.
 
 See `docs/system-design` for the full architecture and the verification log.
 

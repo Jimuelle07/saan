@@ -10,14 +10,19 @@ use saan_core::{Engine, Index};
 use serde::Deserialize;
 
 /// saan ("where?"): local semantic file search, grep and glob.
+///
+/// With no subcommand, `saan` opens the desktop launcher.
 #[derive(Parser)]
-#[command(version)]
+#[command(
+    version,
+    about = "saan (\"where?\"): local semantic file search, grep and glob. Run with no subcommand to open the desktop launcher."
+)]
 struct Cli {
     /// Index directory (default: $SAAN_INDEX_DIR or ./.saan/index).
     #[arg(long, global = true)]
     index: Option<PathBuf>,
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]
@@ -77,14 +82,63 @@ fn index_dir(cli: &Cli) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".saan").join("index"))
 }
 
+/// Model folder, or the same error `saan` has always printed when it is missing.
+fn model_dir() -> Result<PathBuf> {
+    find_model_dir().context("EmbeddingGemma not found; run `saan fetch-model` or set SAAN_MODEL_DIR")
+}
+
 fn load_embedder() -> Result<Embedder> {
-    let dir = find_model_dir().context("EmbeddingGemma not found; run `saan fetch-model` or set SAAN_MODEL_DIR")?;
-    Embedder::load(&dir)
+    Embedder::load(&model_dir()?)
 }
 
 /// Engine for eval/bench: always local-only so results are reproducible.
 fn local_engine(cli: &Cli) -> Result<Engine> {
-    Ok(Engine::new(Index::load(&index_dir(cli))?, load_embedder()?, None))
+    Ok(Engine::new(Index::load(&index_dir(cli))?, model_dir()?, None))
+}
+
+/// Path of the desktop app: `$SAAN_APP`, else `saan-app[.exe]` next to this binary.
+fn app_binary() -> Result<PathBuf> {
+    if let Some(path) = std::env::var_os("SAAN_APP") {
+        return Ok(PathBuf::from(path));
+    }
+    let exe = std::env::current_exe().context("locating the saan executable")?;
+    let dir = exe.parent().context("the saan executable has no parent directory")?;
+    Ok(dir.join(if cfg!(windows) { "saan-app.exe" } else { "saan-app" }))
+}
+
+/// Launch the desktop app detached, with `SAAN_SHOW=1` so its window appears.
+fn launch_app() -> Result<()> {
+    let exe = app_binary()?;
+    if !exe.is_file() {
+        bail!(
+            "desktop app not found at {}; build/install it (scripts/install.ps1) or set SAAN_APP",
+            exe.display()
+        );
+    }
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.env("SAAN_SHOW", "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        #[link(name = "user32")]
+        extern "system" {
+            fn AllowSetForegroundWindow(process_id: u32) -> i32;
+        }
+        const ASFW_ANY: u32 = u32::MAX;
+        // This process was started by the terminal the user is typing in, so it may
+        // take the foreground. Pass that right on: either the new launcher or an
+        // already-running instance (reached through the single-instance plugin)
+        // can then focus its window instead of appearing behind the terminal.
+        // SAFETY: plain Win32 call with no pointers; failure only means no focus.
+        unsafe { AllowSetForegroundWindow(ASFW_ANY) };
+        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: the launcher outlives this terminal.
+        cmd.creation_flags(0x0000_0008 | 0x0000_0200);
+    }
+    cmd.spawn().with_context(|| format!("launching {}", exe.display()))?;
+    Ok(())
 }
 
 fn load_cases(file: &Path) -> Result<Vec<EvalCase>> {
@@ -123,7 +177,11 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 }
 
 fn run(cli: &Cli) -> Result<bool> {
-    match &cli.cmd {
+    let Some(cmd) = &cli.cmd else {
+        launch_app()?;
+        return Ok(true);
+    };
+    match cmd {
         Cmd::FetchModel => fetch_model()?,
         Cmd::Index { root } => {
             let embedder = load_embedder()?;
@@ -143,7 +201,7 @@ fn run(cli: &Cli) -> Result<bool> {
             );
         }
         Cmd::Search { query, k, json } => {
-            let engine = Engine::new(Index::load(&index_dir(cli))?, load_embedder()?, JevClient::from_env());
+            let engine = Engine::new(Index::load(&index_dir(cli))?, model_dir()?, JevClient::from_env());
             let res = engine.search(&query.join(" "), *k)?;
             if *json {
                 println!("{}", serde_json::to_string_pretty(&res)?);
@@ -185,6 +243,7 @@ fn run(cli: &Cli) -> Result<bool> {
         }
         Cmd::Bench { file, runs, max_ms } => {
             let engine = local_engine(cli)?;
+            engine.preload()?;
             let cases = load_cases(file)?;
             for case in &cases {
                 engine.search(&case.query, 10)?; // warm-up

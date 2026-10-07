@@ -12,7 +12,8 @@ A privacy-first, local launcher that replaces slow exact-string file exploration
 | **Glob** | You remember the *name or path shape* | `glob: **/*.pdf` · `meeting-notes.md` |
 
 Files that share a name (two `README.md`, three `todo.txt`) are always shown with
-their full, distinct path so they can be told apart.
+their full, distinct path — plus size, modification date and type — so they can be
+told apart.
 
 ## Principles
 
@@ -23,7 +24,9 @@ their full, distinct path so they can be told apart.
 - **Fast.** Rust backend, brute-force cosine search over an in-memory index,
   target p95 < 100 ms per warm query.
 - **Lightweight.** One Tauri binary + one model folder. No Python, no server, no GPU
-  required. Plain TypeScript UI (no framework).
+  required. Plain TypeScript UI (no framework). Footprint counts: the ~197 MB
+  model is loaded lazily on the first semantic query and dropped again after a
+  few idle minutes, so an unused launcher stays small.
 - **Optional typed decisions.** [Jev](https://docs.typesafe.ai/api) (TypeSafe AI
   System One) can choose the search mode for ambiguous queries and pick between
   near-duplicate candidates. Off by default; three privacy levels control what is sent.

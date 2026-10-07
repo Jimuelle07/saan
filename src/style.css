@@ -31,6 +31,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .name { font-weight: 600; }
 .badge { margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #3a3220; color: #e0b85a; }
 .rel { color: var(--dim); font-size: 12px; }
+.rel strong.diff { color: var(--text); font-weight: 600; }
+.meta { margin-top: 2px; font-size: 11px; color: var(--dim); }
 .setup[hidden] { display: none; }
 .snippet { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

@@ -10,6 +10,9 @@ interface Hit {
   line: number | null;
   snippet: string;
   same_name: boolean;
+  size: number;
+  modified: number;
+  ext: string;
 }
 
 interface SearchResponse {
@@ -25,6 +28,7 @@ interface Status {
   files: number;
   jev: boolean;
   hotkey: string;
+  model_loaded: boolean;
   error: string | null;
 }
 
@@ -41,11 +45,97 @@ let hits: Hit[] = [];
 let selected = 0;
 let seq = 0;
 let debounce: number | undefined;
+let statusTimer: number | undefined;
 
 function el(tag: string, cls: string, text: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = cls;
   node.textContent = text;
+  return node;
+}
+
+const EXT_LABELS: Record<string, string> = {
+  md: "Markdown",
+  txt: "Text",
+  pdf: "PDF",
+  rs: "Rust",
+  py: "Python",
+  ts: "TypeScript",
+  js: "JavaScript",
+  go: "Go",
+  sql: "SQL",
+  json: "JSON",
+  toml: "TOML",
+};
+
+function fmtSize(bytes: number): string {
+  if (bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+function fmtModified(unix: number): string {
+  if (unix <= 0) return "";
+  const then = unix * 1000;
+  const diff = Date.now() - then;
+  if (diff < 60_000) return "just now";
+  const min = Math.floor(diff / 60_000);
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h ago`;
+  const days = Math.floor(diff / 86_400_000);
+  if (days <= 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return new Date(then).toLocaleDateString();
+}
+
+function metaEl(hit: Hit): HTMLElement {
+  const meta = el("div", "meta", "");
+  const label = hit.ext ? (EXT_LABELS[hit.ext] ?? hit.ext.toUpperCase()) : "File";
+  const pieces: HTMLElement[] = [el("span", "", label)];
+  const size = fmtSize(hit.size);
+  if (size) pieces.push(el("span", "", size));
+  const when = fmtModified(hit.modified);
+  if (when) {
+    const span = el("span", "", when);
+    span.title = new Date(hit.modified * 1000).toLocaleString();
+    pieces.push(span);
+  }
+  pieces.forEach((piece, i) => {
+    if (i > 0) meta.append(document.createTextNode(" · "));
+    meta.append(piece);
+  });
+  return meta;
+}
+
+function sharedDirCount(name: string): number {
+  const group = hits.filter((h) => h.name === name);
+  if (group.length === 0) return 0;
+  const dirs = group.map((h) => h.rel.split(/[\\/]/).slice(0, -1));
+  const first = dirs[0];
+  let n = 0;
+  while (n < first.length && dirs.every((d) => n < d.length && d[n] === first[n])) n++;
+  return n;
+}
+
+function relEl(hit: Hit): HTMLElement {
+  const node = el("div", "rel", "");
+  const pieces = hit.rel.split(/([\\/])/); // alternating: segment, separator, segment, …
+  const segCount = Math.ceil(pieces.length / 2);
+  const dirCount = segCount - 1;
+  const shared = hit.same_name ? sharedDirCount(hit.name) : dirCount;
+  pieces.forEach((piece, i) => {
+    if (i % 2 === 1) {
+      node.append(document.createTextNode(piece));
+      return;
+    }
+    const seg = i / 2;
+    if (seg < dirCount && seg >= shared) node.append(el("strong", "diff", piece));
+    else node.append(document.createTextNode(piece));
+  });
+  if (hit.line) node.append(document.createTextNode(`:${hit.line}`));
   return node;
 }
 
@@ -62,7 +152,7 @@ function render(): void {
     const title = el("div", "", "");
     title.append(el("span", "name", hit.name));
     if (hit.same_name) title.append(el("span", "badge", "same name"));
-    li.append(title, el("div", "rel", hit.line ? `${hit.rel}:${hit.line}` : hit.rel));
+    li.append(title, relEl(hit), metaEl(hit));
     if (hit.snippet) li.append(el("div", "snippet", hit.snippet));
     li.addEventListener("mousemove", () => select(i));
     li.addEventListener("click", () => open(i, false));
@@ -119,11 +209,23 @@ async function refreshStatus(): Promise<void> {
   setupEl.hidden = s.ready;
   if (s.root && !rootEl.value) rootEl.value = s.root;
   const jev = s.jev ? "Jev on" : "local only";
+  const model = s.model_loaded ? "model loaded" : "model sleeping";
   statusEl.textContent = s.error
     ? s.error
     : s.ready
-      ? `${s.files} files · ${s.root ?? ""} · ${jev} · ${s.hotkey} to toggle · Enter open · Ctrl+Enter reveal`
+      ? `${s.files} files · ${s.root ?? ""} · ${jev} · ${model} · ${s.hotkey} to toggle · Enter open · Ctrl+Enter reveal`
       : `Loading index… (${s.hotkey} toggles this window)`;
+  if (s.ready) {
+    if (statusTimer !== undefined) {
+      window.clearTimeout(statusTimer);
+      statusTimer = undefined;
+    }
+  } else if (statusTimer === undefined) {
+    statusTimer = window.setTimeout(() => {
+      statusTimer = undefined;
+      refreshStatus();
+    }, 1000);
+  }
 }
 
 queryEl.addEventListener("input", () => {
@@ -157,4 +259,3 @@ window.addEventListener("focus", () => {
 });
 
 refreshStatus();
-window.setInterval(refreshStatus, 3000);

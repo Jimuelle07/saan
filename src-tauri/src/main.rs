@@ -2,21 +2,29 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 use saan_core::embed::{find_model_dir, Embedder, MODEL_DIR_NAME};
 use saan_core::jev::JevClient;
 use saan_core::{Engine, Index, SearchResponse};
 use serde::{Deserialize, Serialize};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 /// Global hotkey that toggles the launcher.
 const HOTKEY_LABEL: &str = "Ctrl+Shift+Space";
 
+/// Set at startup when launched with `SAAN_SHOW`; consumed by the first page load.
+static SHOW_ON_LOAD: AtomicBool = AtomicBool::new(false);
+
 #[derive(Default)]
 struct AppState {
-    engine: Arc<RwLock<Option<Engine>>>,
+    /// The engine itself is reference-counted so background threads (model
+    /// preload, idle unload) can work on it without holding this lock.
+    engine: Arc<RwLock<Option<Arc<Engine>>>>,
     /// Last load/index error, shown in the launcher footer.
     error: Arc<RwLock<Option<String>>>,
 }
@@ -32,6 +40,8 @@ struct Status {
     root: Option<String>,
     files: usize,
     jev: bool,
+    /// The ONNX model is in memory right now (it unloads while hidden).
+    model_loaded: bool,
     hotkey: &'static str,
     error: Option<String>,
 }
@@ -71,14 +81,19 @@ fn model_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// (Re)build the index for `root` and swap in a fresh engine.
 fn build_engine(app: &AppHandle, root: &Path) -> Result<usize, String> {
-    let embedder = Embedder::load(&model_dir(app)?).map_err(|e| format!("{e:#}"))?;
+    // Two threads keeps background indexing from starving the UI; the engine
+    // opens its own embedder lazily, so this indexing one is dropped below.
+    let model_path = model_dir(app)?;
+    let embedder = Embedder::load_with_threads(&model_path, 2).map_err(|e| format!("{e:#}"))?;
     let dir = index_dir(app)?;
     let previous = Index::load(&dir).ok();
     let (index, _) = Index::build(root, &embedder, previous.as_ref(), |_| {}).map_err(|e| format!("{e:#}"))?;
     index.save(&dir).map_err(|e| format!("{e:#}"))?;
     let files = index.files.len();
+    drop(embedder);
     let state = app.state::<AppState>();
-    *state.engine.write().expect("engine lock") = Some(Engine::new(index, embedder, JevClient::from_env()));
+    *state.engine.write().expect("engine lock") =
+        Some(Arc::new(Engine::new(index, model_path, JevClient::from_env())));
     *state.error.write().expect("error lock") = None;
     Ok(files)
 }
@@ -92,9 +107,11 @@ fn startup(app: &AppHandle) {
             return Ok(());
         }
         let Ok(index) = Index::load(&index_dir(app)?) else { return Ok(()) };
-        let embedder = Embedder::load(&model_dir(app)?).map_err(|e| format!("{e:#}"))?;
+        // No model load at startup: the engine opens it lazily on the first
+        // semantic query, or as soon as the window shows and preloads it.
+        let model_path = model_dir(app)?;
         *app.state::<AppState>().engine.write().expect("engine lock") =
-            Some(Engine::new(index, embedder, JevClient::from_env()));
+            Some(Arc::new(Engine::new(index, model_path, JevClient::from_env())));
         Ok(())
     })();
     if let Err(e) = result {
@@ -138,7 +155,8 @@ async fn status(app: AppHandle, state: State<'_, AppState>) -> Result<Status, St
         ready: engine.is_some(),
         root: load_config(&app).root.map(|r| r.display().to_string()),
         files: engine.as_ref().map_or(0, |e| e.index.files.len()),
-        jev: engine.as_ref().is_some_and(Engine::jev_enabled),
+        jev: engine.as_ref().is_some_and(|e| e.jev_enabled()),
+        model_loaded: engine.as_ref().is_some_and(|e| e.model_loaded()),
         hotkey: HOTKEY_LABEL,
         error: state.error.read().expect("error lock").clone(),
     })
@@ -167,15 +185,51 @@ fn toggle_window(app: &AppHandle) {
     if w.is_visible().unwrap_or(false) {
         let _ = w.hide();
     } else {
+        show_window(app);
+    }
+}
+
+/// Show the launcher centered and focused, then warm the model on a background
+/// thread so inference is ready while the user types.
+fn show_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
         let _ = w.center();
         let _ = w.show();
         let _ = w.set_focus();
     }
+    let state = app.state::<AppState>();
+    let engine = state.engine.clone();
+    let error = state.error.clone();
+    std::thread::spawn(move || {
+        // `SAAN_SHOW` can fire before the startup thread has loaded the index;
+        // wait briefly for the engine to appear instead of skipping the warmup.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let ready = loop {
+            let current = engine.read().expect("engine lock").clone();
+            if current.is_some() {
+                break current;
+            }
+            if Instant::now() >= deadline {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        };
+        // Clone the engine out so the state lock is not held while the model loads.
+        let Some(engine) = ready else { return };
+        if let Err(err) = engine.preload() {
+            *error.write().expect("error lock") = Some(format!("{err:#}"));
+        }
+    });
 }
 
 fn main() {
     let hotkey = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
     tauri::Builder::default()
+        // Registered first: a second `saan` launch signals this process to
+        // show/focus the existing window instead of starting another instance.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_window(app);
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -191,10 +245,40 @@ fn main() {
             app.global_shortcut().register(hotkey)?;
             let handle = app.handle().clone();
             std::thread::spawn(move || startup(&handle));
+            // `SAAN_SHOW` (set by `saan` with no arguments) shows the window once the
+            // page has loaded: showing it earlier lets WebView2 initialisation hand
+            // focus back to the terminal, and hide-on-blur then closes it again.
             if std::env::var_os("SAAN_SHOW").is_some() {
-                toggle_window(app.handle());
+                SHOW_ON_LOAD.store(true, Ordering::SeqCst);
             }
+            // While the launcher sits hidden, drop the model once it has been
+            // idle long enough so an empty window does not pin ~150 MB.
+            let idle_secs: u64 = std::env::var("SAAN_IDLE_UNLOAD_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(300);
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_secs(30));
+                let hidden = handle
+                    .get_webview_window("main")
+                    .map(|w| !w.is_visible().unwrap_or(true))
+                    .unwrap_or(true);
+                if !hidden {
+                    continue;
+                }
+                let state = handle.state::<AppState>();
+                let ready = state.engine.read().expect("engine lock").clone();
+                if let Some(engine) = ready {
+                    let _ = engine.release_if_idle(Duration::from_secs(idle_secs));
+                }
+            });
             Ok(())
+        })
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Finished && SHOW_ON_LOAD.swap(false, Ordering::SeqCst) {
+                show_window(webview.app_handle());
+            }
         })
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
